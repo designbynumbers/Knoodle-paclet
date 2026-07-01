@@ -16,7 +16,9 @@ apply () {  # description  file  sed-expr
   local desc="$1" f="$2" expr="$3"
   echo ">> $desc"
   echo "   $KND/$f"
-  sed -i "$expr" "$KND/$f"
+  # Portable in-place edit: GNU `sed -i EXPR` and BSD/macOS `sed -i '' EXPR`
+  # disagree, so use a temp file (plain `sed` is identical on both).
+  sed "$expr" "$KND/$f" > "$KND/$f.tmp" && mv "$KND/$f.tmp" "$KND/$f"
 }
 
 # --- P1 -----------------------------------------------------------------------

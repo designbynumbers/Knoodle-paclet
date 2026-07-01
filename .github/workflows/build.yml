@@ -77,7 +77,9 @@ jobs:
             dnf install -y gcc-toolset-13 clang > /dev/null
             source /opt/rh/gcc-toolset-13/enable
             export CXX=clang++ OPT="-O2"
-            export EXTRA="--gcc-toolchain=/opt/rh/gcc-toolset-13/root/usr -static-libstdc++ -static-libgcc"
+            # LLVM clang (unlike Apple clang) chokes on __restrict-qualified template
+            # params (safe_alloc/function_traits); TOOLS_NO_RESTRICT drops the qualifier.
+            export EXTRA="--gcc-toolchain=/opt/rh/gcc-toolset-13/root/usr -static-libstdc++ -static-libgcc -DTOOLS_NO_RESTRICT"
             clang++ --version | head -2
             bash ci/build-tools.sh
           '
