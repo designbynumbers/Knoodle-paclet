@@ -1,0 +1,3 @@
+[submodule "Knoodle"]
+	path = Knoodle
+	url = https://github.com/HenrikSchumacher/Knoodle.git
