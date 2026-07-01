@@ -37,6 +37,9 @@ jobs:
           echo "--- submodule tree ---"
           git submodule status --recursive | sed 's/^/  /'
 
+      - name: Apply temporary Windows src patches (pending upstream handoff)
+        run: bash ci/windows-src-patches.sh
+
       - name: Set up clang (LLVM)
         run: |
           if command -v clang++ >/dev/null 2>&1; then
