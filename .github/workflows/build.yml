@@ -1,0 +1,101 @@
+name: build
+
+# Build the three Knoodle CLI tools with clang across the platforms the paclet
+# targets:
+#   - Windows x86-64  : clang (MSVC target) on windows-latest
+#   - macOS arm64     : Apple clang on macos-26 (pinned; macos-latest can still be 15)
+#   - Linux x86-64    : built inside an AlmaLinux 8 container (glibc 2.28) with
+#                       gcc-toolset-13's libstdc++ statically linked, so one binary
+#                       runs on every Linux distro Wolfram supports (RHEL/Alma 8/9/10,
+#                       Ubuntu 22.04+, Debian 11+, Fedora, SUSE — glibc >= 2.28).
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build.yml"
+      - "ci/**"
+      - ".gitmodules"
+      - "Knoodle"
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x86_64
+            runs-on: windows-latest
+            systemid: Windows-x86-64
+          - name: macos-arm64
+            runs-on: macos-26
+            systemid: MacOSX-ARM64
+          - name: linux-x86_64
+            runs-on: ubuntu-latest
+            systemid: Linux-x86-64
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout paclet
+        uses: actions/checkout@v4
+
+      - name: Fetch Knoodle + nested submodules (ssh->https, skip LFS data)
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init --recursive
+          echo "Knoodle pin: $(git -C Knoodle rev-parse HEAD)"
+
+      - name: Apply temporary upstream-pending src patches
+        run: bash ci/windows-src-patches.sh
+
+      - name: Set up clang (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if command -v clang++ >/dev/null 2>&1; then echo "clang++ already on PATH";
+          elif [ -x "/c/Program Files/LLVM/bin/clang++.exe" ]; then echo "/c/Program Files/LLVM/bin" >> "$GITHUB_PATH";
+          else choco install llvm -y; echo "/c/Program Files/LLVM/bin" >> "$GITHUB_PATH"; fi
+
+      - name: Build (host clang — Windows / macOS)
+        if: runner.os != 'Linux'
+        env:
+          OPT: "-O2"
+        run: |
+          clang++ --version | head -2
+          bash ci/build-tools.sh
+
+      - name: Build (AlmaLinux 8 container — glibc 2.28 baseline, static libstdc++)
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -v "$PWD":/work -w /work almalinux:8 bash -exc '
+            dnf install -y gcc-toolset-13 clang > /dev/null
+            source /opt/rh/gcc-toolset-13/enable
+            export CXX=clang++ OPT="-O2"
+            export EXTRA="--gcc-toolchain=/opt/rh/gcc-toolset-13/root/usr -static-libstdc++ -static-libgcc"
+            clang++ --version | head -2
+            bash ci/build-tools.sh
+          '
+          echo "--- max GLIBC symbol version the binary requires (want <= 2.28) ---"
+          objdump -T build/knoodlesimplify | grep -oE "GLIBC_[0-9.]+" | sort -V | tail -1 || true
+
+      - name: Smoke test (each binary runs)
+        run: |
+          for f in build/*; do
+            [ -f "$f" ] || continue
+            echo "=== $f --help ==="
+            "$f" --help || true
+          done
+
+      - name: Upload binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: knoodle-tools-${{ matrix.systemid }}
+          path: build/*
+          if-no-files-found: warn

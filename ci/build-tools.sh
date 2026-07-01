@@ -47,12 +47,12 @@ esac
 
 echo "== compiler =="
 "$CXX" --version | head -1
-echo "== flags: $STD $OPT $FEAT ${PLATFORM_FLAGS[*]:-} =="
+echo "== flags: $STD $OPT $FEAT ${EXTRA:-} ${PLATFORM_FLAGS[*]:-} =="
 echo
 
 for tool in knoodlesimplify knoodledraw knoodleidentify; do
   echo "=== building $tool ==="
-  "$CXX" $STD $OPT $FEAT "${INCLUDES[@]}" "${PLATFORM_FLAGS[@]}" \
+  "$CXX" $STD $OPT $FEAT ${EXTRA:-} "${INCLUDES[@]}" "${PLATFORM_FLAGS[@]}" \
     "$KND/tools/$tool.cpp" -o "$OUT/$tool$EXE"
   echo "    -> $OUT/$tool$EXE"
 done
