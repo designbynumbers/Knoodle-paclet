@@ -1,0 +1,34 @@
+# --- AI tooling: never commit to this repo (kept out by design) ---
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.cursor/
+.cursorrules
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editors ---
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- Build output / bundled artifacts (produced by CI, not committed) ---
+build/
+dist/
+staging/
+*.paclet
+
+# Compiled binaries — built per-platform by CI and bundled into the .paclet,
+# never checked into source.
+*.o
+*.obj
+*.exe
+*.dll
+*.dylib
+*.so
+*.a
+*.lib
