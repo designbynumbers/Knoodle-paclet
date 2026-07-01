@@ -33,7 +33,11 @@ runGeometry[tsv_String, simplify_] := Module[{drawIn, out},
   drawIn = If[TrueQ[simplify],
      RunProcess[{exe["knoodlesimplify"], "--streaming-mode"}, "StandardOutput", tsv],
      tsv];
-  out = RunProcess[{exe["knoodledraw"], "--format=wl"}, "StandardOutput", drawIn];
+  (* Square grid: undo the ASCII rectangular-character aspect compensation, since
+     a Graphics is rendered on a square grid. Equal x/y grid sizes. *)
+  out = RunProcess[
+     {exe["knoodledraw"], "--format=wl", "--x-grid-size=4", "--y-grid-size=4"},
+     "StandardOutput", drawIn];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
 
