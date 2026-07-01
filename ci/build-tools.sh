@@ -36,6 +36,9 @@ PLATFORM_FLAGS=()
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*|Windows_NT)
     EXE=".exe"                       # Windows: threading via the runtime, no -pthread
+    # MSVC-target clang: __restrict-qualified pointer types break Tools::function_traits
+    # (Tools/FunctionTraits.hpp). Henrik's TOOLS_NO_RESTRICT drops the restrict qualifier.
+    PLATFORM_FLAGS+=(-DTOOLS_NO_RESTRICT)
     ;;
   *)
     PLATFORM_FLAGS+=(-pthread)       # POSIX
