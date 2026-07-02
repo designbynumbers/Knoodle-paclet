@@ -135,6 +135,52 @@ polygonCentroid[pts_] := Module[{p, n, cross, area, cx, cy},
   {cx, cy}
 ];
 
+(* ---- face label placement: a discretized "pole of inaccessibility", restricted
+   to grid-square centers, so it stays well inside even very non-convex faces
+   (a plain polygon centroid can land outside a non-convex face entirely).
+   A grid square is one cell of OrthoDraw's own layout grid (BoundingBox is its
+   width/height in cells); its center in Points/Boundary coordinates is offset
+   by half a grid square from the cell's corner. Boundary distance and
+   containment both come straight from the Region framework -- no hand-rolled
+   geometry. *)
+gridSquareCenters[w_, h_] := Flatten[
+   Table[$gridSize {i + 1/2, j + 1/2}, {i, 0, w - 1}, {j, 0, h - 1}], 1];
+
+(* Lexicographic-max of {distance, x, y} -- WL's default Sort/Order on same-shape
+   lists of reals is lexicographic, so Last@Sort gives exactly that: farthest
+   from the boundary, ties broken rightmost then topmost. *)
+lexBest[scored_] := Last[Sort[scored]][[{2, 3}]];
+
+interiorFaceLabelPos[face_, w_, h_] := Module[{poly = face["Boundary"], inside},
+  inside = Select[gridSquareCenters[w, h], RegionMember[Polygon[poly]]];
+  If[inside === {}, Return[polygonCentroid[poly]]];  (* face smaller than one grid cell *)
+  lexBest[{RegionDistance[Line[poly], #], #[[1]], #[[2]]} & /@ inside]
+];
+
+(* The exterior face is unbounded, so candidates are restricted to the ring of
+   grid cells framing the diagram's own bounding rectangle R (only R's right
+   edge grows if that ring turns up empty -- e.g. the diagram fills its box
+   edge-to-edge on all other sides). Distance is capped by closeness to R's own
+   edge too, so the label doesn't crowd the image boundary. *)
+exteriorFaceLabelPos[extFace_, w_, h_, interiorPolys_] := Module[
+  {expand = 0, rw, ring, notInterior, ex},
+  notInterior = RegionMember[RegionUnion @@ (Polygon /@ interiorPolys)] /* Not;
+  While[True,
+   rw = w + expand;
+   ring = $gridSize (# + {1/2, 1/2}) & /@ Select[Tuples[{Range[0, rw - 1], Range[0, h - 1]}],
+      (#[[1]] == 0 || #[[1]] == rw - 1 || #[[2]] == 0 || #[[2]] == h - 1) &];
+   ex = Select[ring, notInterior];
+   If[ex =!= {} || expand > 20, Break[]];
+   expand++];
+  If[ex === {}, Return[polygonCentroid[extFace["Boundary"]]]];  (* shouldn't happen *)
+  lexBest[{Min[RegionDistance[Line[extFace["Boundary"]], #],
+       RegionDistance[RegionBoundary[Rectangle[{0, 0}, $gridSize {rw, h}]], #]], #[[1]], #[[2]]} & /@ ex]
+];
+
+faceLabelPos[face_, w_, h_, interiorPolys_] := If[TrueQ[face["Exterior"]],
+   exteriorFaceLabelPos[face, w, h, interiorPolys],
+   interiorFaceLabelPos[face, w, h]];
+
 (* ---- arc label placement, per spec, computed on the RAW (un-rounded) polyline:
    - if the arc has a horizontal section, place the label's bottom-center at the
      midpoint of its LONGEST horizontal segment, nudged up a bit (like underlining).
@@ -176,16 +222,22 @@ faceFill[colorSign_] := If[colorSign > 0,
    (0 = sharp corners). checkerboardQ shades faces; labelSet is a subset of
    {"Crossings","Arcs","Faces"}. *)
 render[assoc_Association, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_] := Module[
-  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, faceLayer, strandLayer, labelLayer, style},
+  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, faceLayer, strandLayer, labelLayer, style,
+   interiorFaces, interiorPolys, w, h},
   style = labelStyle[];
+
+  interiorFaces = If[KeyExistsQ[assoc, "Faces"], Select[assoc["Faces"], !TrueQ[#["Exterior"]] &], {}];
+  interiorPolys = interiorFaces[[All, "Boundary"]];
+  {w, h} = assoc["BoundingBox"];
 
   (* faceFill[...] returns a *list* of directives ({Opacity[...], color}); it must be
      spliced (Sequence @@) into the surrounding primitive list, not nested as a single
      list element -- Graphics directive scoping does not propagate out of a nested
-     sub-list, so {{Opacity[...],color}, Polygon[...]} silently ignores the styling. *)
-  faceLayer = If[TrueQ[checkerboardQ] && KeyExistsQ[assoc, "Faces"],
+     sub-list, so {{Opacity[...],color}, Polygon[...]} silently ignores the styling.
+     The exterior face is never filled (it isn't part of the checkerboard picture). *)
+  faceLayer = If[TrueQ[checkerboardQ],
     Table[{Sequence @@ faceFill[face["Color"]], EdgeForm[], Polygon[face["Boundary"]]},
-      {face, assoc["Faces"]}],
+      {face, interiorFaces}],
     {}];
 
   strandLayer = {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
@@ -203,7 +255,7 @@ render[assoc_Association, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_] 
        {arc, assoc["Arcs"]}], {}],
     If[MemberQ[labelSet, "Faces"] && KeyExistsQ[assoc, "Faces"],
      Table[
-       Text[style[face["Id"]], polygonCentroid[face["Boundary"]], {0, 0}, Background -> None],
+       Text[style[face["Id"]], faceLabelPos[face, w, h, interiorPolys], {0, 0}, Background -> None],
        {face, assoc["Faces"]}], {}]
     };
 
