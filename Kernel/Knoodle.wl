@@ -72,8 +72,15 @@ toTSV[f_Function] := toTSV[Most@Table[f[t], {t, 0., 2 Pi, 2 Pi/160}]];
 toTSV[spec : {_Integer, _Integer}] := toTSV[KnotData[spec, "SpaceCurve"]];
 toTSV[name_String] := toTSV[KnotData[name, "SpaceCurve"]];
 toTSV[k_ /; headNameQ[k, "Knot"]] := toTSV[Take[List @@ k, 2]];
-(* native Knoodle PD: rows of 4 (unsigned) or 5 (signed) integers *)
+(* native Knoodle PD: rows of 4 (unsigned) or 5 (signed) integers -- one summand. *)
 toTSV[pd : {{Repeated[_Integer, {4, 5}]} ..}] := {ExportString[pd, "TSV"], False};
+(* Multiple summands: a list where each entry is itself a summand's row list, or
+   {} for a bare unknot summand (connect-sum factor or split component -- Knoodle's
+   wire format doesn't distinguish the two; see knoodle_io.hpp). {{}} is the
+   standalone unknot, the one-summand case of this same pattern. *)
+toTSV[summands : {({{Repeated[_Integer, {4, 5}]} ...} | {}) ..}] := {
+   "k\n" <> StringJoin[("s\n" <> If[# === {}, "", ExportString[#, "TSV"]]) & /@ summands],
+   False};
 (* KnotTheory PD[X[i,j,k,l], ...] -> Knoodle 4-col unsigned, 0-indexed (identity slots) *)
 toTSV[p_ /; headNameQ[p, "PD"]] :=
   {ExportString[((List @@ # &) /@ (List @@ p)) - 1, "TSV"], False};
@@ -217,51 +224,77 @@ faceFill[colorSign_] := If[colorSign > 0,
   {Opacity[0.14], ThemeColor["Accent1"]},
   {Opacity[0.045], ThemeColor["Foreground"]}];
 
-(* ---- render a geometry association as Graphics ----
-   radiusFrac is the corner radius as a fraction of one grid square, in [0, 1/2]
-   (0 = sharp corners). checkerboardQ shades faces; labelSet is a subset of
-   {"Crossings","Arcs","Faces"}. *)
-render[assoc_Association, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_] := Module[
-  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, faceLayer, strandLayer, labelLayer, style,
-   interiorFaces, interiorPolys, w, h},
-  style = labelStyle[];
+(* ---- render one summand's geometry association as a primitive list ----
+   compOffset shifts this summand's arc "Component" indices, so every summand in
+   a multi-summand picture (connect-sum factors / split components -- see
+   toTSV's multi-summand pattern) draws in its own run of ColorData[97] colors
+   instead of each restarting at color 1. radiusFrac is the corner radius as a
+   fraction of one grid square, in [0,1/2] (0 = sharp corners). checkerboardQ
+   shades faces; labelSet is a subset of {"Crossings","Arcs","Faces"}. *)
+summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelSet_, compOffset_] := Module[
+  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, style = labelStyle[], interiorFaces, interiorPolys, w, h},
 
   interiorFaces = If[KeyExistsQ[assoc, "Faces"], Select[assoc["Faces"], !TrueQ[#["Exterior"]] &], {}];
   interiorPolys = interiorFaces[[All, "Boundary"]];
   {w, h} = assoc["BoundingBox"];
 
-  (* faceFill[...] returns a *list* of directives ({Opacity[...], color}); it must be
-     spliced (Sequence @@) into the surrounding primitive list, not nested as a single
-     list element -- Graphics directive scoping does not propagate out of a nested
-     sub-list, so {{Opacity[...],color}, Polygon[...]} silently ignores the styling.
-     The exterior face is never filled (it isn't part of the checkerboard picture). *)
-  faceLayer = If[TrueQ[checkerboardQ],
+  {
+   (* faceFill[...] returns a *list* of directives ({Opacity[...], color}); it must be
+      spliced (Sequence @@) into the surrounding primitive list, not nested as a single
+      list element -- Graphics directive scoping does not propagate out of a nested
+      sub-list, so {{Opacity[...],color}, Polygon[...]} silently ignores the styling.
+      The exterior face is never filled (it isn't part of the checkerboard picture). *)
+   If[TrueQ[checkerboardQ],
     Table[{Sequence @@ faceFill[face["Color"]], EdgeForm[], Polygon[face["Boundary"]]},
       {face, interiorFaces}],
-    {}];
+    {}],
 
-  strandLayer = {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
-    Table[{ColorData[97][arc["Component"] + 1],
+   {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
+    Table[{ColorData[97][arc["Component"] + compOffset + 1],
        Line[If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]]},
-      {arc, assoc["Arcs"]}]};
+      {arc, assoc["Arcs"]}]},
 
-  labelLayer = {
-    If[MemberQ[labelSet, "Crossings"] && KeyExistsQ[assoc, "Crossings"],
-     Table[Text[style[cr["Id"]], cr["Pos"], {-1, -1}, Background -> None],
-       {cr, assoc["Crossings"]}], {}],
-    If[MemberQ[labelSet, "Arcs"],
-     Table[
-       Text[style[arc["Id"]], Sequence @@ arcLabelSpec[arc["Points"]], Background -> None],
-       {arc, assoc["Arcs"]}], {}],
-    If[MemberQ[labelSet, "Faces"] && KeyExistsQ[assoc, "Faces"],
-     Table[
-       Text[style[face["Id"]], faceLabelPos[face, w, h, interiorPolys], {0, 0}, Background -> None],
-       {face, assoc["Faces"]}], {}]
-    };
-
-  Graphics[{faceLayer, strandLayer, labelLayer},
-   AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]]
+   If[MemberQ[labelSet, "Crossings"] && KeyExistsQ[assoc, "Crossings"],
+    Table[Text[style[cr["Id"]], cr["Pos"], {-1, -1}, Background -> None],
+      {cr, assoc["Crossings"]}], {}],
+   If[MemberQ[labelSet, "Arcs"],
+    Table[Text[style[arc["Id"]], Sequence @@ arcLabelSpec[arc["Points"]], Background -> None],
+      {arc, assoc["Arcs"]}], {}],
+   If[MemberQ[labelSet, "Faces"] && KeyExistsQ[assoc, "Faces"],
+    Table[Text[style[face["Id"]], faceLabelPos[face, w, h, interiorPolys], {0, 0}, Background -> None],
+      {face, assoc["Faces"]}], {}]
+   }
 ];
+
+(* A bare "<|"Unknot"->True|>" marker (knoodledraw's stand-in for a 0-crossing
+   summand -- see the C++-side comment on DrawKnot) draws as a simple loop, in
+   the same strand style, occupying one grid square. *)
+unknotPrimitives[thick_, compOffset_] := {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
+   ColorData[97][compOffset + 1], Circle[$gridSize {1/2, 1/2}, $gridSize/2]};
+
+geoWidth[assoc_] := If[KeyExistsQ[assoc, "Unknot"], $gridSize, First[assoc["BoundingBox"]] $gridSize];
+geoComponentCount[assoc_] := If[KeyExistsQ[assoc, "Unknot"], 1,
+   Max[assoc["Arcs"][[All, "Component"]], -1] + 1];
+
+(* Lay out one or more summands (connect-sum factors / split components) left to
+   right, each gap grid squares apart, each in its own local coordinate frame
+   translated into place with the built-in Translate (no manual coordinate
+   arithmetic needed) -- and each claiming its own run of component colors, so
+   two unrelated summands never accidentally share "Component 0"'s color. *)
+$summandGap = 2;
+layoutGeos[geos_List, thick_, radiusFrac_, checkerboardQ_, labelSet_] := Module[{x = 0, c = 0, prims, w, nc, dx},
+  Table[
+   {prims, w, nc} = If[KeyExistsQ[geo, "Unknot"],
+      {unknotPrimitives[thick, c], $gridSize, 1},
+      {summandPrimitives[geo, thick, radiusFrac, checkerboardQ, labelSet, c], geoWidth[geo], geoComponentCount[geo]}];
+   dx = x; x += w + $summandGap $gridSize; c += nc;
+   Translate[prims, {dx, 0}],
+   {geo, geos}]
+];
+
+render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_] :=
+  Graphics[layoutGeos[geos, thick, radiusFrac, checkerboardQ, labelSet],
+   AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]];
 
 (* ---- public entry point ---- *)
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
@@ -278,7 +311,7 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   geos = runGeometry[tsv, simp, layoutFlags[OptionValue["LayoutOptions"]]];
   If[geos === {}, Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
-  render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize],
+  render[geos, OptionValue["Thickness"], OptionValue[ImageSize],
     OptionValue["CornerRadius"], OptionValue["Checkerboard"], labelSet]
 ];
 
