@@ -59,17 +59,45 @@ toTSV[c_ /; headNameQ[c, "DTCode"] || headNameQ[c, "GaussCode"]] :=
   (Needs["KnotTheory`"]; toTSV[Symbol["KnotTheory`PD"][c]]);
 toTSV[other_] := (Message[KnoodleDraw::badinput, other]; $Failed);
 
+(* ---- corner rounding: replace each 90-degree bend with a circular arc tangent
+   to both edges, inset by `frac` of the SHORTER adjacent edge. Using the shorter
+   edge guarantees a straight segment survives in the middle of every edge, even
+   one that bends at both ends (default frac = 1/3 -> at most 1/3 eaten per end). *)
+cornerArc[Pm_, Pi_, Pp_, frac_] := Module[{Lin, Lout, uin, uout, d, a, b},
+  Lin = EuclideanDistance[Pm, Pi]; Lout = EuclideanDistance[Pi, Pp];
+  If[Lin < 1.*^-9 || Lout < 1.*^-9, Return[Nothing]];
+  uin = (Pm - Pi)/Lin; uout = (Pp - Pi)/Lout;
+  If[Abs[uin . uout + 1] < 1.*^-6, Return[Nothing]];      (* collinear: no real corner *)
+  d = frac Min[Lin, Lout];
+  a = Pi + d uin; b = Pi + d uout;
+  {a, b, a + b - Pi, d}                                   (* {start, end, center, radius} (90-degree) *)
+];
+arcSample[a_, b_, center_, d_, k_ : 8] := Module[{ta, sweep},
+  ta = ArcTan @@ (a - center);
+  sweep = Mod[(ArcTan @@ (b - center)) - ta + Pi, 2 Pi] - Pi;   (* short signed sweep *)
+  Table[center + d {Cos[ta + t sweep], Sin[ta + t sweep]}, {t, 0., 1., 1./k}]
+];
+roundedPolyline[pts_, frac_] := Module[{out = {N@First[pts]}, ca},
+  If[Length[pts] < 3, Return[N@pts]];
+  Do[
+    ca = cornerArc[pts[[i - 1]], pts[[i]], pts[[i + 1]], frac];
+    If[ca === Nothing, AppendTo[out, N@pts[[i]]], out = Join[out, arcSample @@ ca]],
+    {i, 2, Length[pts] - 1}];
+  Append[out, N@Last[pts]]
+];
+
 (* ---- render a geometry association as Graphics ---- *)
-render[assoc_Association, thick_, img_] := Graphics[
+render[assoc_Association, thick_, img_, rounded_] := Graphics[
   {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
-   Table[{ColorData[97][arc["Component"] + 1], Line[arc["Points"]]},
+   Table[{ColorData[97][arc["Component"] + 1],
+      Line[If[TrueQ[rounded], roundedPolyline[arc["Points"], 1/3], N@arc["Points"]]]},
      {arc, assoc["Arcs"]}]},
   AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]
 ];
 
 (* ---- public entry point ---- *)
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
-Options[KnoodleDraw] = {"Simplify" -> Automatic, ImageSize -> 340, "Thickness" -> 7};
+Options[KnoodleDraw] = {"Simplify" -> Automatic, "Rounded" -> True, ImageSize -> 340, "Thickness" -> 7};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
@@ -77,7 +105,7 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
   geos = runGeometry[tsv, simp];
   If[geos === {}, Return[$Failed]];
-  render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize]]
+  render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["Rounded"]]
 ];
 
 End[];
