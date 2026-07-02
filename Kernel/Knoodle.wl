@@ -13,7 +13,10 @@ KnoodleDraw::usage =
 input may be a KnotData/Knot specification (e.g. {3,1} or \"Trefoil\"), a KnotTheory \
 PD[X[...]] / DTCode / GaussCode, a list of 3D points, or a native Knoodle PD code \
 (rows of 4 or 5 integers). Option \"Simplify\" (Automatic) controls whether the given \
-diagram is drawn as-is or a simplified diagram of the same knot is drawn.";
+diagram is drawn as-is or a simplified diagram of the same knot is drawn. Option \
+\"Checkerboard\" (False) shades the diagram's two-colorable faces. Option \"Labels\" \
+(a subset of {\"Crossings\",\"Arcs\",\"Faces\"}) annotates the diagram with 0-based \
+element ids.";
 
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
@@ -108,31 +111,123 @@ roundedPolyline[pts_, radius_] := Module[{out = {N@First[pts]}, ca},
   Append[out, N@Last[pts]]
 ];
 
+(* ---- label styling: matches system plotting functions (Plot, Graph, ...), which
+   never hardcode a FontFamily -- LabelStyle/BaseStyle resolve to {} even on a
+   fully-resolved Plot, so fonts are purely inherited from the notebook stylesheet.
+   Mirroring that (no FontFamily here either) makes labels track whatever font the
+   surrounding notebook already uses. Color/opacity use the theme system (ThemeColor,
+   LightDark-aware) rather than fixed grays, so labels stay legible and appropriately
+   subdued in both light and dark mode, and under custom notebook themes. *)
+labelStyle[sz_ : 11] := Style[#, sz, Opacity[0.7], ThemeColor["Foreground"]] &;
+
+(* ---- polygon centroid (area-weighted; falls back to a vertex average for
+   degenerate/zero-area or self-touching boundaries) -- used for face labels. *)
+polygonCentroid[pts_] := Module[{p, n, cross, area, cx, cy},
+  p = N[pts];
+  If[Length[p] > 1 && First[p] == Last[p], p = Most[p]];
+  n = Length[p];
+  If[n < 3, Return[Mean[p]]];
+  cross[i_] := p[[i, 1]] p[[Mod[i, n] + 1, 2]] - p[[Mod[i, n] + 1, 1]] p[[i, 2]];
+  area = Sum[cross[i], {i, n}]/2;
+  If[Abs[area] < 10.^-9, Return[Mean[p]]];
+  cx = Sum[(p[[i, 1]] + p[[Mod[i, n] + 1, 1]]) cross[i], {i, n}]/(6 area);
+  cy = Sum[(p[[i, 2]] + p[[Mod[i, n] + 1, 2]]) cross[i], {i, n}]/(6 area);
+  {cx, cy}
+];
+
+(* ---- arc label placement, per spec, computed on the RAW (un-rounded) polyline:
+   - if the arc has a horizontal section, place the label's bottom-center at the
+     midpoint of its LONGEST horizontal segment, nudged up a bit (like underlining).
+   - if the arc is purely vertical (no horizontal segment at all), place the label's
+     left-center at the arc-length midpoint of the whole polyline, nudged right.
+   Every segment on this grid is axis-aligned, so these two cases are exhaustive. *)
+$labelGap = 0.35;
+arcLabelSpec[pts_] := Module[
+  {segs, horiz, longest, mid, lens, cum, total, half, i, t, pos},
+  segs = Partition[pts, 2, 1];
+  horiz = Select[segs, (#[[1, 2]] == #[[2, 2]]) &];
+  If[horiz =!= {},
+   longest = First[SortBy[horiz, -Abs[#[[2, 1]] - #[[1, 1]]] &]];
+   mid = {Mean[longest[[All, 1]]], longest[[1, 2]]};
+   {mid + {0, $labelGap}, {0, -1}}
+   ,
+   lens = EuclideanDistance @@@ segs;
+   cum = Prepend[Accumulate[lens], 0.];
+   total = Last[cum];
+   half = total/2;
+   i = Clip[LengthWhile[cum, # < half &], {1, Length[segs]}];
+   t = If[cum[[i + 1]] == cum[[i]], 0., (half - cum[[i]])/(cum[[i + 1]] - cum[[i]])];
+   pos = segs[[i, 1]] + t (segs[[i, 2]] - segs[[i, 1]]);
+   {pos + {$labelGap, 0}, {-1, 0}}
+   ]
+];
+
+(* ---- checkerboard face fill: low-opacity theme-color washes rather than fixed
+   colors, so shading adapts to light/dark mode and to custom notebook themes.
+   Color[+1] faces are washed with the notebook's Accent1 (ties the shading to
+   the theme's own accent); Color[-1] faces get a barely-there foreground wash
+   (like graph paper), so the picture reads as "shaded", not "painted". *)
+faceFill[colorSign_] := If[colorSign > 0,
+  {Opacity[0.14], ThemeColor["Accent1"]},
+  {Opacity[0.045], ThemeColor["Foreground"]}];
+
 (* ---- render a geometry association as Graphics ----
    radiusFrac is the corner radius as a fraction of one grid square, in [0, 1/2]
-   (0 = sharp corners). *)
-render[assoc_Association, thick_, img_, radiusFrac_] := Module[{r = Clip[radiusFrac, {0, 0.5}] $gridSize},
- Graphics[
-  {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
-   Table[{ColorData[97][arc["Component"] + 1],
-      Line[If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]]},
-     {arc, assoc["Arcs"]}]},
-  AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]]
+   (0 = sharp corners). checkerboardQ shades faces; labelSet is a subset of
+   {"Crossings","Arcs","Faces"}. *)
+render[assoc_Association, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_] := Module[
+  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, faceLayer, strandLayer, labelLayer, style},
+  style = labelStyle[];
+
+  (* faceFill[...] returns a *list* of directives ({Opacity[...], color}); it must be
+     spliced (Sequence @@) into the surrounding primitive list, not nested as a single
+     list element -- Graphics directive scoping does not propagate out of a nested
+     sub-list, so {{Opacity[...],color}, Polygon[...]} silently ignores the styling. *)
+  faceLayer = If[TrueQ[checkerboardQ] && KeyExistsQ[assoc, "Faces"],
+    Table[{Sequence @@ faceFill[face["Color"]], EdgeForm[], Polygon[face["Boundary"]]},
+      {face, assoc["Faces"]}],
+    {}];
+
+  strandLayer = {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
+    Table[{ColorData[97][arc["Component"] + 1],
+       Line[If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]]},
+      {arc, assoc["Arcs"]}]};
+
+  labelLayer = {
+    If[MemberQ[labelSet, "Crossings"] && KeyExistsQ[assoc, "Crossings"],
+     Table[Text[style[cr["Id"]], cr["Pos"], {-1, -1}, Background -> None],
+       {cr, assoc["Crossings"]}], {}],
+    If[MemberQ[labelSet, "Arcs"],
+     Table[
+       Text[style[arc["Id"]], Sequence @@ arcLabelSpec[arc["Points"]], Background -> None],
+       {arc, assoc["Arcs"]}], {}],
+    If[MemberQ[labelSet, "Faces"] && KeyExistsQ[assoc, "Faces"],
+     Table[
+       Text[style[face["Id"]], polygonCentroid[face["Boundary"]], {0, 0}, Background -> None],
+       {face, assoc["Faces"]}], {}]
+    };
+
+  Graphics[{faceLayer, strandLayer, labelLayer},
+   AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]]
 ];
 
 (* ---- public entry point ---- *)
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
 (* "CornerRadius": corner arc radius as a fraction of one grid square, in [0, 1/2]
-   (0 = sharp corners). *)
-Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {}, ImageSize -> 340, "Thickness" -> 7};
-KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos},
+   (0 = sharp corners). "Checkerboard": shade the two-colorable faces. "Labels": a
+   subset of {"Crossings","Arcs","Faces"} (a single string is also accepted). *)
+Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {},
+   "Checkerboard" -> False, "Labels" -> {}, ImageSize -> 340, "Thickness" -> 7};
+KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
   {tsv, def} = norm;
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
   geos = runGeometry[tsv, simp, layoutFlags[OptionValue["LayoutOptions"]]];
   If[geos === {}, Return[$Failed]];
-  render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"]]
+  labelSet = Flatten[{OptionValue["Labels"]}];
+  render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize],
+    OptionValue["CornerRadius"], OptionValue["Checkerboard"], labelSet]
 ];
 
 End[];
