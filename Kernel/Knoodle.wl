@@ -24,6 +24,10 @@ Begin["`Private`"];
 $KnoodleBinaryDirectory = "/Users/jasoncantarella/Knoodle/tools";
 exe[name_String] := FileNameJoin[{$KnoodleBinaryDirectory, name}];
 
+(* Square grid spacing requested from knoodledraw (see runGeometry). One grid
+   square is this many coordinate units; the corner radius is a fraction of it. *)
+$gridSize = 4;
+
 (* ---- context-free head test (KnotTheory symbols live in various contexts) ---- *)
 headNameQ[x_, name_String] := MatchQ[Head[x], _Symbol] && SymbolName[Head[x]] === name;
 
@@ -36,7 +40,8 @@ runGeometry[tsv_String, simplify_] := Module[{drawIn, out},
   (* Square grid: undo the ASCII rectangular-character aspect compensation, since
      a Graphics is rendered on a square grid. Equal x/y grid sizes. *)
   out = RunProcess[
-     {exe["knoodledraw"], "--format=wl", "--x-grid-size=4", "--y-grid-size=4"},
+     {exe["knoodledraw"], "--format=wl",
+      "--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]},
      "StandardOutput", drawIn];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
@@ -59,16 +64,18 @@ toTSV[c_ /; headNameQ[c, "DTCode"] || headNameQ[c, "GaussCode"]] :=
   (Needs["KnotTheory`"]; toTSV[Symbol["KnotTheory`PD"][c]]);
 toTSV[other_] := (Message[KnoodleDraw::badinput, other]; $Failed);
 
-(* ---- corner rounding: replace each 90-degree bend with a circular arc tangent
-   to both edges, inset by `frac` of the SHORTER adjacent edge. Using the shorter
-   edge guarantees a straight segment survives in the middle of every edge, even
-   one that bends at both ends (default frac = 1/3 -> at most 1/3 eaten per end). *)
-cornerArc[Pm_, Pi_, Pp_, frac_] := Module[{Lin, Lout, uin, uout, d, a, b},
+(* ---- corner rounding: replace each 90-degree bend with a circular arc of the
+   given (fixed) radius, tangent to both edges. The radius is a fraction of one
+   grid square (not of the edge), so long edges do not get larger arcs and the
+   arc always stays inside the corner's grid cell (radius <= half a grid square).
+   Clamped to half the shorter adjacent edge only to stay within pathologically
+   short edges. *)
+cornerArc[Pm_, Pi_, Pp_, radius_] := Module[{Lin, Lout, uin, uout, d, a, b},
   Lin = EuclideanDistance[Pm, Pi]; Lout = EuclideanDistance[Pi, Pp];
   If[Lin < 1.*^-9 || Lout < 1.*^-9, Return[Nothing]];
   uin = (Pm - Pi)/Lin; uout = (Pp - Pi)/Lout;
   If[Abs[uin . uout + 1] < 1.*^-6, Return[Nothing]];      (* collinear: no real corner *)
-  d = frac Min[Lin, Lout];
+  d = Min[radius, 0.5 Min[Lin, Lout]];
   a = Pi + d uin; b = Pi + d uout;
   {a, b, a + b - Pi, d}                                   (* {start, end, center, radius} (90-degree) *)
 ];
@@ -77,27 +84,32 @@ arcSample[a_, b_, center_, d_, k_ : 8] := Module[{ta, sweep},
   sweep = Mod[(ArcTan @@ (b - center)) - ta + Pi, 2 Pi] - Pi;   (* short signed sweep *)
   Table[center + d {Cos[ta + t sweep], Sin[ta + t sweep]}, {t, 0., 1., 1./k}]
 ];
-roundedPolyline[pts_, frac_] := Module[{out = {N@First[pts]}, ca},
+roundedPolyline[pts_, radius_] := Module[{out = {N@First[pts]}, ca},
   If[Length[pts] < 3, Return[N@pts]];
   Do[
-    ca = cornerArc[pts[[i - 1]], pts[[i]], pts[[i + 1]], frac];
+    ca = cornerArc[pts[[i - 1]], pts[[i]], pts[[i + 1]], radius];
     If[ca === Nothing, AppendTo[out, N@pts[[i]]], out = Join[out, arcSample @@ ca]],
     {i, 2, Length[pts] - 1}];
   Append[out, N@Last[pts]]
 ];
 
-(* ---- render a geometry association as Graphics ---- *)
-render[assoc_Association, thick_, img_, rounded_] := Graphics[
+(* ---- render a geometry association as Graphics ----
+   radiusFrac is the corner radius as a fraction of one grid square, in [0, 1/2]
+   (0 = sharp corners). *)
+render[assoc_Association, thick_, img_, radiusFrac_] := Module[{r = Clip[radiusFrac, {0, 0.5}] $gridSize},
+ Graphics[
   {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
    Table[{ColorData[97][arc["Component"] + 1],
-      Line[If[TrueQ[rounded], roundedPolyline[arc["Points"], 1/3], N@arc["Points"]]]},
+      Line[If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]]},
      {arc, assoc["Arcs"]}]},
-  AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]
+  AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]]
 ];
 
 (* ---- public entry point ---- *)
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
-Options[KnoodleDraw] = {"Simplify" -> Automatic, "Rounded" -> True, ImageSize -> 340, "Thickness" -> 7};
+(* "CornerRadius": corner arc radius as a fraction of one grid square, in [0, 1/2]
+   (0 = sharp corners). *)
+Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, ImageSize -> 340, "Thickness" -> 7};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
@@ -105,7 +117,7 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
   geos = runGeometry[tsv, simp];
   If[geos === {}, Return[$Failed]];
-  render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["Rounded"]]
+  render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"]]
 ];
 
 End[];
