@@ -33,15 +33,30 @@ headNameQ[x_, name_String] := MatchQ[Head[x], _Symbol] && SymbolName[Head[x]] ==
 
 (* ---- run knoodledraw --format=wl (optionally simplifying first) ----
    Returns a list of geometry associations, one per connect-sum summand. *)
-runGeometry[tsv_String, simplify_] := Module[{drawIn, out},
+(* Forward layout-tuning knobs to knoodledraw. "name"->n or "name"->"s" become
+   --name=..., "name"->True/False become --name / --no-name. Lets a caller pull up
+   alternate layouts of the same diagram, e.g.
+     "LayoutOptions" -> {"randomize-bends" -> 3}
+     "LayoutOptions" -> {"compaction" -> "topo-order", "turn-regularize" -> False} *)
+layoutFlags[rules : {___Rule}] := Map[
+  Which[
+    #[[2]] === True,  "--" <> #[[1]],
+    #[[2]] === False, "--no-" <> #[[1]],
+    True,             "--" <> #[[1]] <> "=" <> ToString[#[[2]]]] &,
+  List @@@ rules];
+layoutFlags[_] := {};
+
+runGeometry[tsv_String, simplify_, extraFlags_List] := Module[{drawIn, out},
   drawIn = If[TrueQ[simplify],
      RunProcess[{exe["knoodlesimplify"], "--streaming-mode"}, "StandardOutput", tsv],
      tsv];
-  (* Square grid: undo the ASCII rectangular-character aspect compensation, since
-     a Graphics is rendered on a square grid. Equal x/y grid sizes. *)
+  (* Square grid: undo the ASCII rectangular-character aspect compensation, since a
+     Graphics is rendered on a square grid. Equal x/y grid sizes. Caller flags come
+     last so they can override. *)
   out = RunProcess[
-     {exe["knoodledraw"], "--format=wl",
-      "--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]},
+     Join[{exe["knoodledraw"], "--format=wl",
+           "--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]},
+          extraFlags],
      "StandardOutput", drawIn];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
@@ -109,13 +124,13 @@ render[assoc_Association, thick_, img_, radiusFrac_] := Module[{r = Clip[radiusF
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
 (* "CornerRadius": corner arc radius as a fraction of one grid square, in [0, 1/2]
    (0 = sharp corners). *)
-Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, ImageSize -> 340, "Thickness" -> 7};
+Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {}, ImageSize -> 340, "Thickness" -> 7};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
   {tsv, def} = norm;
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
-  geos = runGeometry[tsv, simp];
+  geos = runGeometry[tsv, simp, layoutFlags[OptionValue["LayoutOptions"]]];
   If[geos === {}, Return[$Failed]];
   render[First[geos], OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"]]
 ];
