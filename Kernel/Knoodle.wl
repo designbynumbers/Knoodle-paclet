@@ -49,18 +49,28 @@ layoutFlags[rules : {___Rule}] := Map[
   List @@@ rules];
 layoutFlags[_] := {};
 
-runGeometry[tsv_String, simplify_, extraFlags_List] := Module[{drawIn, out},
-  drawIn = If[TrueQ[simplify],
-     RunProcess[{exe["knoodlesimplify"], "--streaming-mode"}, "StandardOutput", tsv],
-     tsv];
-  (* Square grid: undo the ASCII rectangular-character aspect compensation, since a
-     Graphics is rendered on a square grid. Equal x/y grid sizes. Caller flags come
-     last so they can override. *)
-  out = RunProcess[
-     Join[{exe["knoodledraw"], "--format=wl",
-           "--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]},
-          extraFlags],
-     "StandardOutput", drawIn];
+(* A unique scratch file, e.g. tempFile["knoodle-simplified-", ".tsv"]. *)
+tempFile[prefix_String, extension_String] :=
+  FileNameJoin[{$TemporaryDirectory, prefix <> CreateUUID[] <> extension}];
+
+(* File[path] input (multi-component 3D / .kndlxyz -- see toTSV) can't be piped
+   through --streaming-mode, which only reads stdin; knoodlesimplify's file mode
+   needs an explicit --output. Draw-from-file likewise takes the path as a
+   trailing argument instead of stdin. *)
+runGeometry[in_, simplify_, extraFlags_List] := Module[{tsv, out, gridFlags},
+  gridFlags = {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]};
+  tsv = Which[
+     TrueQ[simplify] && Head[in] === File,
+      Module[{outFile = tempFile["knoodle-simplified-", ".tsv"]},
+       RunProcess[{exe["knoodlesimplify"], "--output=" <> outFile, First[in]}];
+       Import[outFile, "Text"]],
+     TrueQ[simplify],
+      RunProcess[{exe["knoodlesimplify"], "--streaming-mode"}, "StandardOutput", in],
+     Head[in] === File, None,  (* draw directly from the file, no simplify step *)
+     True, in];
+  out = If[tsv === None,
+     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, {First[in]}], "StandardOutput"],
+     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags], "StandardOutput", tsv]];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
 
@@ -72,13 +82,27 @@ toTSV[f_Function] := toTSV[Most@Table[f[t], {t, 0., 2 Pi, 2 Pi/160}]];
 toTSV[spec : {_Integer, _Integer}] := toTSV[KnotData[spec, "SpaceCurve"]];
 toTSV[name_String] := toTSV[KnotData[name, "SpaceCurve"]];
 toTSV[k_ /; headNameQ[k, "Knot"]] := toTSV[Take[List @@ k, 2]];
-(* native Knoodle PD: rows of 4 (unsigned) or 5 (signed) integers -- one summand. *)
-toTSV[pd : {{Repeated[_Integer, {4, 5}]} ..}] := {ExportString[pd, "TSV"], False};
+(* Multi-component 3D geometry -- one link component per point list. Knoodle
+   only reads this format (blank-line-separated vertex blocks, one component
+   per block) from a *file* with a .kndlxyz extension, never from stdin -- see
+   README.md's "Input formats" section -- so this writes a scratch file and
+   returns File[...] instead of a TSV string; runGeometry knows how to draw
+   (and, if needed, simplify) directly from a File[...]. *)
+toTSV[components : {{{_?NumericQ, _?NumericQ, _?NumericQ} ..} ..}] := Module[{f = tempFile["knoodle-", ".kndlxyz"]},
+  Export[f, StringRiffle[ExportString[N[#], "TSV"] & /@ components, "\n"], "Text"];
+  {File[f], True}];
+(* native Knoodle PD: rows of 4 (unsigned), 5 (signed), 6 (unsigned+colors), or
+   7 (signed+colors) integers -- one summand. The last two columns, when
+   present, are the incoming under-/over-arc's explicit color (see
+   PDCode.hpp) -- how a link's components are tagged on the wire, and how
+   knoodlesimplify preserves component identity through simplification when
+   given colored input (knoodle_io.hpp: colored in -> colored out). *)
+toTSV[pd : {{Repeated[_Integer, {4, 7}]} ..}] := {ExportString[pd, "TSV"], False};
 (* Multiple summands: a list where each entry is itself a summand's row list, or
    {} for a bare unknot summand (connect-sum factor or split component -- Knoodle's
    wire format doesn't distinguish the two; see knoodle_io.hpp). {{}} is the
    standalone unknot, the one-summand case of this same pattern. *)
-toTSV[summands : {({{Repeated[_Integer, {4, 5}]} ...} | {}) ..}] := {
+toTSV[summands : {({{Repeated[_Integer, {4, 7}]} ...} | {}) ..}] := {
    "k\n" <> StringJoin[("s\n" <> If[# === {}, "", ExportString[#, "TSV"]]) & /@ summands],
    False};
 (* KnotTheory PD[X[i,j,k,l], ...] -> Knoodle 4-col unsigned, 0-indexed (identity slots) *)
@@ -292,9 +316,19 @@ layoutGeos[geos_List, thick_, radiusFrac_, checkerboardQ_, labelSet_] := Module[
    {geo, geos}]
 ];
 
-render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_] :=
-  Graphics[layoutGeos[geos, thick, radiusFrac, checkerboardQ, labelSet],
-   AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]];
+totalComponentCount[geos_List] := Total[If[KeyExistsQ[#, "Unknot"], 1, geoComponentCount[#]] & /@ geos];
+
+(* legendQ draws a LineLegend matching each component's strand color to its
+   (global, 0-based) component number -- the same numbering layoutGeos assigns
+   colors by, running across every summand, not restarting per summand. *)
+render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_, legendQ_] := Module[
+  {g = Graphics[layoutGeos[geos, thick, radiusFrac, checkerboardQ, labelSet],
+     AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]], n},
+  If[TrueQ[legendQ],
+   n = totalComponentCount[geos];
+   Legended[g, LineLegend[ColorData[97] /@ Range[n], Range[0, n - 1]]],
+   g]
+];
 
 (* ---- public entry point ---- *)
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
@@ -304,9 +338,11 @@ KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
    "ExteriorFace": which face OrthoDraw lays out as the unbounded exterior region
    (a non-negative integer, 0-based; Automatic, the default, is OrthoDraw's own
    default -- the largest face by arc count). Applies uniformly to every summand
-   of a multi-summand diagram. *)
+   of a multi-summand diagram. PlotLegends -> Automatic adds a legend matching
+   each link component's color to its (global) component number. *)
 Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {},
-   "Checkerboard" -> False, "Labels" -> {}, "ExteriorFace" -> Automatic, ImageSize -> 340, "Thickness" -> 7};
+   "Checkerboard" -> False, "Labels" -> {}, "ExteriorFace" -> Automatic, PlotLegends -> None,
+   ImageSize -> 340, "Thickness" -> 7};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet, extFlag},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
@@ -317,8 +353,8 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   geos = runGeometry[tsv, simp, Join[layoutFlags[OptionValue["LayoutOptions"]], extFlag]];
   If[geos === {}, Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
-  render[geos, OptionValue["Thickness"], OptionValue[ImageSize],
-    OptionValue["CornerRadius"], OptionValue["Checkerboard"], labelSet]
+  render[geos, OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"],
+    OptionValue["Checkerboard"], labelSet, OptionValue[PlotLegends] =!= None]
 ];
 
 End[];
