@@ -18,6 +18,19 @@ diagram is drawn as-is or a simplified diagram of the same knot is drawn. Option
 (a subset of {\"Crossings\",\"Arcs\",\"Faces\"}) annotates the diagram with 0-based \
 element ids.";
 
+KnoodleSimplify::usage =
+  "KnoodleSimplify[input] simplifies a knot or link diagram, returning a PlanarDiagramComplex \
+object that KnoodleDraw can render directly. input accepts the same representations as \
+KnoodleDraw. Option \"SimplifyLevel\" (Automatic, knoodlesimplify's own default) sets the \
+simplification effort. \"RandomizeProjection\" (True) applies a random shear before \
+projecting 3D input, as in KnoodleDraw.";
+
+PlanarDiagramComplex::usage =
+  "PlanarDiagramComplex[<|\"serialized\"->...|>] wraps the result of KnoodleSimplify: a \
+simplified knot/link complex in PlanarDiagramComplex's own native serialization, which \
+preserves colors exactly, including for components that simplified away to a free-floating \
+unknot. Pass it directly to KnoodleDraw.";
+
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
 
@@ -81,6 +94,45 @@ runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False] := Module[{tsv
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
 
+(* ---- run knoodlesimplify --format=pdc, returning the raw serialized string
+   (PlanarDiagramComplex's own native format -- see WriteToFile/FromInString
+   and the paired knoodle_io.hpp/knoodlesimplify.cpp changes) for
+   KnoodleSimplify to wrap. File[...] input (multi-component 3D) can't stream
+   through --streaming-mode, same constraint as runGeometry -- see its
+   comment -- so it goes through an explicit --output file instead; this
+   otherwise mirrors runGeometry's dispatch but stops after the simplify
+   step rather than also drawing. *)
+runSimplifyPdc[in_, extraFlags_List] := If[Head[in] === File,
+   Module[{outFile = tempFile["knoodle-pdc-", ".txt"]},
+    RunProcess[Join[{exe["knoodlesimplify"], "--format=pdc", "--output=" <> outFile}, extraFlags, {First[in]}]];
+    Import[outFile, "Text"]],
+   RunProcess[Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags],
+     "StandardOutput", in]
+];
+
+(* ---- cheap line-prefix summary of a PDC-native serialized string, for
+   PlanarDiagramComplex's summary box (below) -- every line is either a
+   marker ("k", "u <color>", "s <flag>") or a tab-separated PD data row, so a
+   crossing count is just "does this line contain a tab". *)
+pdcSummary[s_String] := Module[{lines = DeleteCases[StringSplit[s, "\n"], "" | "k"]},
+  <|
+   "CrossingCount" -> Count[lines, _?(StringContainsQ[#, "\t"] &)],
+   "SummandCount" -> Count[lines, _?(StringStartsQ[#, "s "] &)],
+   "UnknotCount" -> Count[lines, _?(StringStartsQ[#, "u "] &)]
+   |>
+];
+
+PlanarDiagramComplex /: MakeBoxes[pdc : PlanarDiagramComplex[assoc_Association], fmt_] :=
+ Module[{summary = pdcSummary[assoc["serialized"]]},
+  BoxForm`ArrangeSummaryBox[
+   PlanarDiagramComplex, pdc, None,
+   {{BoxForm`SummaryItem[{"Crossings: ", summary["CrossingCount"]}]},
+    {BoxForm`SummaryItem[{"Summands: ", summary["SummandCount"]}],
+     BoxForm`SummaryItem[{"Unknots: ", summary["UnknotCount"]}]}},
+   {}, fmt, "Interpretable" -> Automatic
+  ]
+];
+
 (* ---- input normalization: input -> {tsvString, defaultSimplifyQ} ----
    Geometry/KnotData inputs default to simplifying (the raw projection is arbitrary);
    explicit codes default to drawing *this* diagram. *)
@@ -118,6 +170,14 @@ toTSV[p_ /; headNameQ[p, "PD"]] :=
 (* DT / Gauss codes -> PD (via KnotTheory) -> the PD path above *)
 toTSV[c_ /; headNameQ[c, "DTCode"] || headNameQ[c, "GaussCode"]] :=
   (Needs["KnotTheory`"]; toTSV[Symbol["KnotTheory`PD"][c]]);
+(* KnoodleSimplify's own result type -- already simplified, so def is False,
+   same as any other explicit-code input. The serialized string is
+   PlanarDiagramComplex's native format (colors, including for unknot
+   summands, intact); ReadKnot (knoodle_io.hpp) auto-detects and parses it
+   exactly like any other TSV content, so no special-casing is needed past
+   this point -- it flows through runGeometry/runSimplifyPdc unchanged,
+   including re-simplifying it if the caller explicitly asks for that. *)
+toTSV[pdc_ /; headNameQ[pdc, "PlanarDiagramComplex"]] := {pdc[[1, "serialized"]], False};
 toTSV[other_] := (Message[KnoodleDraw::badinput, other]; $Failed);
 
 (* ---- corner rounding: replace each 90-degree bend with a circular arc of the
@@ -369,6 +429,23 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   labelSet = Flatten[{OptionValue["Labels"]}];
   render[geos, OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"],
     OptionValue["Checkerboard"], labelSet, OptionValue[PlotLegends] =!= None]
+];
+
+KnoodleSimplify::badinput = "`1` is not a recognized knot/link input.";
+(* "SimplifyLevel": knoodlesimplify's --simplify-level (Automatic = its own
+   default). "RandomizeProjection": as in KnoodleDraw, applies only to 3D
+   input read from stdin. *)
+Options[KnoodleSimplify] = {"SimplifyLevel" -> Automatic, "RandomizeProjection" -> True};
+KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[{norm, tsv, levelFlag, randFlag, serialized},
+  norm = toTSV[input];
+  If[norm === $Failed, Message[KnoodleSimplify::badinput, input]; Return[$Failed]];
+  tsv = First[norm];
+  levelFlag = Replace[OptionValue["SimplifyLevel"],
+     {Automatic -> {}, n_Integer :> {"--simplify-level=" <> ToString[n]}}];
+  randFlag = If[TrueQ[OptionValue["RandomizeProjection"]], {"--randomize-projection"}, {}];
+  serialized = runSimplifyPdc[tsv, Join[levelFlag, randFlag]];
+  If[! StringQ[serialized], Return[$Failed]];
+  PlanarDiagramComplex[<|"serialized" -> serialized|>]
 ];
 
 End[];
