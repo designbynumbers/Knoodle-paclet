@@ -300,15 +300,21 @@ render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_] :=
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
 (* "CornerRadius": corner arc radius as a fraction of one grid square, in [0, 1/2]
    (0 = sharp corners). "Checkerboard": shade the two-colorable faces. "Labels": a
-   subset of {"Crossings","Arcs","Faces"} (a single string is also accepted). *)
+   subset of {"Crossings","Arcs","Faces"} (a single string is also accepted).
+   "ExteriorFace": which face OrthoDraw lays out as the unbounded exterior region
+   (a non-negative integer, 0-based; Automatic, the default, is OrthoDraw's own
+   default -- the largest face by arc count). Applies uniformly to every summand
+   of a multi-summand diagram. *)
 Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {},
-   "Checkerboard" -> False, "Labels" -> {}, ImageSize -> 340, "Thickness" -> 7};
-KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet},
+   "Checkerboard" -> False, "Labels" -> {}, "ExteriorFace" -> Automatic, ImageSize -> 340, "Thickness" -> 7};
+KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet, extFlag},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
   {tsv, def} = norm;
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
-  geos = runGeometry[tsv, simp, layoutFlags[OptionValue["LayoutOptions"]]];
+  extFlag = Replace[OptionValue["ExteriorFace"],
+     {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}];
+  geos = runGeometry[tsv, simp, Join[layoutFlags[OptionValue["LayoutOptions"]], extFlag]];
   If[geos === {}, Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
   render[geos, OptionValue["Thickness"], OptionValue[ImageSize],
