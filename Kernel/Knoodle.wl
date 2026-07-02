@@ -57,28 +57,26 @@ tempFile[prefix_String, extension_String] :=
    through --streaming-mode, which only reads stdin; knoodlesimplify's file mode
    needs an explicit --output. Draw-from-file likewise takes the path as a
    trailing argument instead of stdin.
-   randomizeQ is --randomize-projection: only meaningful for 3D geometry read
-   from stdin (single-component point lists), where the default projection is
-   straight down the z axis and can degenerate on vertical segments. It's
-   applied to whichever tool actually reads that geometry -- knoodlesimplify
-   when simplifying first, knoodledraw otherwise. The .kndlxyz file path
-   (ProcessXYZFile in knoodledraw.cpp) doesn't read this flag at all yet, so
-   it's deliberately not added to either file-mode call below -- it would be a
-   silent no-op there. *)
+   randomizeQ is --randomize-projection: the default projection is straight
+   down the z axis, which can degenerate on vertical/coplanar segments or (for
+   .kndlxyz) exact coincidental intersections between components. Applied to
+   whichever tool actually reads the geometry -- knoodlesimplify when
+   simplifying first, knoodledraw otherwise -- in both the stdin (single
+   component) and file (multi-component) cases; both now honor the flag. *)
 runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False] := Module[{tsv, out, gridFlags, randFlag},
   gridFlags = {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]};
   randFlag = If[TrueQ[randomizeQ], {"--randomize-projection"}, {}];
   tsv = Which[
      TrueQ[simplify] && Head[in] === File,
       Module[{outFile = tempFile["knoodle-simplified-", ".tsv"]},
-       RunProcess[{exe["knoodlesimplify"], "--output=" <> outFile, First[in]}];
+       RunProcess[Join[{exe["knoodlesimplify"], "--output=" <> outFile}, randFlag, {First[in]}]];
        Import[outFile, "Text"]],
      TrueQ[simplify],
       RunProcess[Join[{exe["knoodlesimplify"], "--streaming-mode"}, randFlag], "StandardOutput", in],
      Head[in] === File, None,  (* draw directly from the file, no simplify step *)
      True, in];
   out = If[tsv === None,
-     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, {First[in]}], "StandardOutput"],
+     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, randFlag, {First[in]}], "StandardOutput"],
      RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, randFlag], "StandardOutput", tsv]];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
