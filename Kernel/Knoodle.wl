@@ -27,7 +27,7 @@ projecting 3D input, as in KnoodleDraw. \"Unite\" (False, i.e. the default \"spl
 controls the output shape for composite/split links: False gives one diagram per \
 diagrammatically-prime factor (same-colored factors share a link component -- the natural \
 input for KnoodleIdentify on a composite knot); True connect-sums same-colored factors back \
-together via PlanarDiagramComplex::Unite, giving one diagram per physically split component \
+together via PlanarDiagramComplex::Connect, giving one diagram per physically split component \
 (the natural single-PD-per-component form for KnotTheory/Regina). \"SimplifyOptions\" ({}) \
 forwards arbitrary knoodlesimplify flags controlling PlanarDiagramComplex::Simplify's \
 algorithm (e.g. {\"dijkstra-strategy\"->\"alternating\", \"canonicalize\"->False} -- see \
@@ -39,6 +39,15 @@ PlanarDiagramComplex::usage =
 simplified knot/link complex in PlanarDiagramComplex's own native serialization, which \
 preserves colors exactly, including for components that simplified away to a free-floating \
 unknot. Pass it directly to KnoodleDraw.";
+
+KnotSymbol::usage =
+  "KnotSymbol[c,i,alternating,coset] identifies a table-looked-up knot summand, as emitted \
+by knoodleidentify (see its --help for the full field description): c crossings, i \
+KnotInfo's per-crossing-count index, alternating a boolean, coset which of {e,m,r,mr} this \
+diagram represents ('/'-joined when several coincide, e.g. \"e/r\"). Displays in KnotInfo \
+notation -- c_i for 3<=c<=10 (e.g. 3_1), or c<a|n>_i for c>=11 (e.g. 11a_456, alternating/\
+non-alternating) -- with a superscript coset tag whenever the coset does not include the \
+identity variant \"e\" (e.g. 3_1^(m/mr) for the mirror trefoil). FullForm is unchanged.";
 
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
@@ -141,6 +150,28 @@ PlanarDiagramComplex /: MakeBoxes[pdc : PlanarDiagramComplex[assoc_Association],
    {}, fmt, "Interpretable" -> Automatic
   ]
 ];
+
+(* ---- KnotSymbol display: KnotInfo-style typeset name, FullForm unchanged.
+   Built with the expression-level Subscript/Superscript/Interpretation (not
+   their *Box primitives directly) and handed to ToBoxes at the very end --
+   InterpretationBox holds its first argument completely (not even a bound
+   local variable's value gets substituted in), so assembling raw boxes by
+   hand here left the display broken no matter how evaluation was forced;
+   Interpretation[...] is a plain expression with its own correct MakeBoxes
+   rule and has none of that trouble. A String argument to Subscript/
+   Superscript displays as its literal characters, with no quote marks and
+   no risk of "/" being read as division -- both verified directly (a bare
+   MakeBoxes-level check doesn't actually render InterpretationBox; only a
+   rendered/exported image does). *)
+knotSymbolExpr[c_Integer, i_Integer, alternating : (True | False), coset_String] :=
+ Module[{base},
+  base = If[3 <= c <= 10, Subscript[c, i], Subscript[ToString[c] <> If[alternating, "a", "n"], i]];
+  If[MemberQ[StringSplit[coset, "/"], "e"], base, Superscript[base, coset]]
+];
+
+KnotSymbol /: MakeBoxes[
+   ks : KnotSymbol[c_Integer, i_Integer, alternating : (True | False), coset_String], fmt_] :=
+ ToBoxes[Interpretation[knotSymbolExpr[c, i, alternating, coset], ks], fmt];
 
 (* ---- input normalization: input -> {tsvString, defaultSimplifyQ} ----
    Geometry/KnotData inputs default to simplifying (the raw projection is arbitrary);
