@@ -49,6 +49,17 @@ notation -- c_i for 3<=c<=10 (e.g. 3_1), or c<a|n>_i for c>=11 (e.g. 11a_456, al
 non-alternating) -- with a superscript coset tag whenever the coset does not include the \
 identity variant \"e\" (e.g. 3_1^(m/mr) for the mirror trefoil). FullForm is unchanged.";
 
+KnoodleIdentify::usage =
+  "KnoodleIdentify[input] identifies a knot diagram via the KLUT (Knot LookUp Table), \
+returning an Association from each distinct prime knot summand (a KnotSymbol[...]) to its \
+multiplicity in the connect-sum decomposition -- e.g. <|KnotSymbol[3,1,True,\"e/r\"]->2|> \
+for the square knot. input accepts the same representations as KnoodleDraw (including a \
+PlanarDiagramComplex from KnoodleSimplify). A summand outside the table appears as \
+Unidentified[n,pd] (n>13, over the table range) or NotFound[n,pd] (n<=13, unresolved even \
+after escalation -- suspicious); multi-component input gives <|Link[n]->1|> (the table is \
+knots-only); an unknot gives <||>. Option \"MaxCrossings\" (Automatic, knoodleidentify's own \
+default of 13) restricts lookup to subtables up to that many crossings.";
+
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
 
@@ -494,6 +505,33 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
   serialized = runSimplifyPdc[tsv, Join[levelFlag, randFlag, uniteFlag, extraFlags]];
   If[! StringQ[serialized], Return[$Failed]];
   PlanarDiagramComplex[<|"serialized" -> serialized|>]
+];
+
+(* ---- run knoodleidentify, returning the raw stdout association-text line.
+   Unlike knoodlesimplify/knoodledraw, knoodleidentify has no --streaming-mode
+   flag (it reads stdin directly whenever no file argument is given) and no
+   --randomize-projection support, so this is simpler than runSimplifyPdc/
+   runGeometry: just the same File[...]-vs-stdin dispatch, no extra flags. *)
+runIdentify[in_, extraFlags_List] := If[Head[in] === File,
+   RunProcess[Join[{exe["knoodleidentify"]}, extraFlags, {First[in]}], "StandardOutput"],
+   RunProcess[Join[{exe["knoodleidentify"]}, extraFlags], "StandardOutput", in]
+];
+
+KnoodleIdentify::badinput = "`1` is not a recognized knot/link input.";
+(* "MaxCrossings": knoodleidentify's --max-crossings (Automatic = its own
+   default, 13). *)
+Options[KnoodleIdentify] = {"MaxCrossings" -> Automatic};
+KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[{norm, tsv, maxFlag, out, result},
+  norm = toTSV[input];
+  If[norm === $Failed, Message[KnoodleIdentify::badinput, input]; Return[$Failed]];
+  tsv = First[norm];
+  maxFlag = Replace[OptionValue["MaxCrossings"],
+     {Automatic -> {}, n_Integer?Positive :> {"--max-crossings=" <> ToString[n]}}];
+  out = runIdentify[tsv, maxFlag];
+  If[! StringQ[out], Return[$Failed]];
+  result = ToExpression[StringTrim[out]];
+  If[Head[result] =!= Association, Return[$Failed]];
+  result
 ];
 
 End[];
