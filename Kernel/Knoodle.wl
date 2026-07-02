@@ -23,7 +23,16 @@ KnoodleSimplify::usage =
 object that KnoodleDraw can render directly. input accepts the same representations as \
 KnoodleDraw. Option \"SimplifyLevel\" (Automatic, knoodlesimplify's own default) sets the \
 simplification effort. \"RandomizeProjection\" (True) applies a random shear before \
-projecting 3D input, as in KnoodleDraw.";
+projecting 3D input, as in KnoodleDraw. \"Unite\" (False, i.e. the default \"split\" shape) \
+controls the output shape for composite/split links: False gives one diagram per \
+diagrammatically-prime factor (same-colored factors share a link component -- the natural \
+input for KnoodleIdentify on a composite knot); True connect-sums same-colored factors back \
+together via PlanarDiagramComplex::Unite, giving one diagram per physically split component \
+(the natural single-PD-per-component form for KnotTheory/Regina). \"SimplifyOptions\" ({}) \
+forwards arbitrary knoodlesimplify flags controlling PlanarDiagramComplex::Simplify's \
+algorithm (e.g. {\"dijkstra-strategy\"->\"alternating\", \"canonicalize\"->False} -- see \
+knoodlesimplify --help for the full list), the same passthrough convention as \
+KnoodleDraw's \"LayoutOptions\".";
 
 PlanarDiagramComplex::usage =
   "PlanarDiagramComplex[<|\"serialized\"->...|>] wraps the result of KnoodleSimplify: a \
@@ -49,18 +58,18 @@ headNameQ[x_, name_String] := MatchQ[Head[x], _Symbol] && SymbolName[Head[x]] ==
 
 (* ---- run knoodledraw --format=wl (optionally simplifying first) ----
    Returns a list of geometry associations, one per connect-sum summand. *)
-(* Forward layout-tuning knobs to knoodledraw. "name"->n or "name"->"s" become
-   --name=..., "name"->True/False become --name / --no-name. Lets a caller pull up
-   alternate layouts of the same diagram, e.g.
+(* Forward arbitrary tuning knobs to a CLI tool. "name"->n or "name"->"s" become
+   --name=..., "name"->True/False become --name / --no-name. Lets a caller reach
+   any flag without a dedicated named option, e.g.
      "LayoutOptions" -> {"randomize-bends" -> 3}
-     "LayoutOptions" -> {"compaction" -> "topo-order", "turn-regularize" -> False} *)
-layoutFlags[rules : {___Rule}] := Map[
+     "SimplifyOptions" -> {"dijkstra-strategy" -> "alternating", "canonicalize" -> False} *)
+toCliFlags[rules : {___Rule}] := Map[
   Which[
     #[[2]] === True,  "--" <> #[[1]],
     #[[2]] === False, "--no-" <> #[[1]],
     True,             "--" <> #[[1]] <> "=" <> ToString[#[[2]]]] &,
   List @@@ rules];
-layoutFlags[_] := {};
+toCliFlags[_] := {};
 
 (* A unique scratch file, e.g. tempFile["knoodle-simplified-", ".tsv"]. *)
 tempFile[prefix_String, extension_String] :=
@@ -423,7 +432,7 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
   extFlag = Replace[OptionValue["ExteriorFace"],
      {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}];
-  geos = runGeometry[tsv, simp, Join[layoutFlags[OptionValue["LayoutOptions"]], extFlag],
+  geos = runGeometry[tsv, simp, Join[toCliFlags[OptionValue["LayoutOptions"]], extFlag],
     TrueQ[OptionValue["RandomizeProjection"]]];
   If[geos === {}, Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
@@ -434,16 +443,24 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
 KnoodleSimplify::badinput = "`1` is not a recognized knot/link input.";
 (* "SimplifyLevel": knoodlesimplify's --simplify-level (Automatic = its own
    default). "RandomizeProjection": as in KnoodleDraw, applies only to 3D
-   input read from stdin. *)
-Options[KnoodleSimplify] = {"SimplifyLevel" -> Automatic, "RandomizeProjection" -> True};
-KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[{norm, tsv, levelFlag, randFlag, serialized},
+   input read from stdin. "Unite": False (default) is knoodlesimplify's own
+   --split (one diagram per prime factor); True is --unite (connect-sums
+   same-colored factors into one diagram per split component -- see
+   KnoodleSimplify::usage). "SimplifyOptions": arbitrary knoodlesimplify
+   flags, same passthrough convention as KnoodleDraw's "LayoutOptions". *)
+Options[KnoodleSimplify] = {"SimplifyLevel" -> Automatic, "RandomizeProjection" -> True,
+   "Unite" -> False, "SimplifyOptions" -> {}};
+KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
+  {norm, tsv, levelFlag, randFlag, uniteFlag, extraFlags, serialized},
   norm = toTSV[input];
   If[norm === $Failed, Message[KnoodleSimplify::badinput, input]; Return[$Failed]];
   tsv = First[norm];
   levelFlag = Replace[OptionValue["SimplifyLevel"],
      {Automatic -> {}, n_Integer :> {"--simplify-level=" <> ToString[n]}}];
   randFlag = If[TrueQ[OptionValue["RandomizeProjection"]], {"--randomize-projection"}, {}];
-  serialized = runSimplifyPdc[tsv, Join[levelFlag, randFlag]];
+  uniteFlag = If[TrueQ[OptionValue["Unite"]], {"--unite"}, {}];
+  extraFlags = toCliFlags[OptionValue["SimplifyOptions"]];
+  serialized = runSimplifyPdc[tsv, Join[levelFlag, randFlag, uniteFlag, extraFlags]];
   If[! StringQ[serialized], Return[$Failed]];
   PlanarDiagramComplex[<|"serialized" -> serialized|>]
 ];
