@@ -56,9 +56,11 @@ multiplicity in the connect-sum decomposition -- e.g. <|KnotSymbol[3,1,True,\"e/
 for the square knot. input accepts the same representations as KnoodleDraw (including a \
 PlanarDiagramComplex from KnoodleSimplify). A summand outside the table appears as \
 Unidentified[n,pd] (n>13, over the table range) or NotFound[n,pd] (n<=13, unresolved even \
-after escalation -- suspicious); multi-component input gives <|Link[n]->1|> (the table is \
-knots-only); an unknot gives <||>. Option \"MaxCrossings\" (Automatic, knoodleidentify's own \
-default of 13) restricts lookup to subtables up to that many crossings.";
+after escalation -- suspicious); an unknot gives <||>. Multi-component (link) input fails \
+with $Failed and a message -- KnoodleIdentify only identifies knots; use KnoodleSimplify with \
+\"Unite\"->True first if the components should be connect-summed into one knot. Option \
+\"MaxCrossings\" (Automatic, knoodleidentify's own default of 13) restricts lookup to \
+subtables up to that many crossings.";
 
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
@@ -518,10 +520,15 @@ runIdentify[in_, extraFlags_List] := If[Head[in] === File,
 ];
 
 KnoodleIdentify::badinput = "`1` is not a recognized knot/link input.";
+KnoodleIdentify::link =
+  "Input is a link (`1` crossings, multiple components) -- KnoodleIdentify only identifies \
+knots. Use KnoodleSimplify with \"Unite\"->True first if the components should be treated as \
+connect-summed into one knot.";
 (* "MaxCrossings": knoodleidentify's --max-crossings (Automatic = its own
    default, 13). *)
 Options[KnoodleIdentify] = {"MaxCrossings" -> Automatic};
-KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[{norm, tsv, maxFlag, out, result},
+KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[
+  {norm, tsv, maxFlag, out, result, linkCrossings},
   norm = toTSV[input];
   If[norm === $Failed, Message[KnoodleIdentify::badinput, input]; Return[$Failed]];
   tsv = First[norm];
@@ -531,6 +538,19 @@ KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[{norm, tsv, maxFlag, 
   If[! StringQ[out], Return[$Failed]];
   result = ToExpression[StringTrim[out]];
   If[Head[result] =!= Association, Return[$Failed]];
+  (* headNameQ, not a literal Link[n_] pattern: ToExpression parses
+     knoodleidentify's output at *runtime*, in whatever context is active at
+     the call site, so the Link it produces is not necessarily
+     Knoodle`Private`Link (the one this file's own Link[n_] would have been
+     compiled against at load time) -- the same context-independence
+     headNameQ already exists for elsewhere (matching KnotTheory symbols
+     regardless of which context that package happens to load into).
+     Declaring a public Knoodle`Link would only trade this for a worse
+     problem: shadowing the unrelated built-in System`Link (WSTP links). *)
+  linkCrossings = Cases[Keys[result], k_ /; headNameQ[k, "Link"] :> First[k]];
+  If[linkCrossings =!= {},
+   Message[KnoodleIdentify::link, First[linkCrossings]];
+   Return[$Failed]];
   result
 ];
 
