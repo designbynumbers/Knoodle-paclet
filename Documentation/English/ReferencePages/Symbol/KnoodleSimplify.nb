@@ -1,0 +1,137 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Wolfram 15.0' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       154,          7]
+NotebookDataLength[      5721,        128]
+NotebookOptionsPosition[      4527,        106]
+NotebookOutlinePosition[      4844,        120]
+CellTagsIndexPosition[      4801,        117]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell["KnoodleSimplify", "Title",ExpressionUUID->"5fd518cb-7fa0-41fa-bc37-adb922c2d45b"],
+
+Cell[TextData[{
+ Cell[BoxData[Cell["KnoodleSimplify[input]",
+   Background->None,ExpressionUUID->"ba5ea0b6-2fd4-4825-9bc3-2b5d35efaed3"]], 
+  "InlineCode",ExpressionUUID->"8284833d-fda2-44b4-b5e7-82eba62034a7"],
+ " simplifies a knot or link diagram, reducing the number of crossings \
+without changing the underlying knot or link type."
+}], "Text",ExpressionUUID->"a146d182-6d8b-49df-8b95-22a474525b4f"],
+
+Cell[TextData[{
+ "Diagrams built from typed-in codes or sampled from space curves are often \
+needlessly complicated, with far more crossings than necessary. ",
+ Cell[BoxData[Cell["KnoodleSimplify",
+   Background->None,ExpressionUUID->"79faa332-9958-4148-938a-c3cef6b0b2a1"]], 
+  "InlineCode",ExpressionUUID->"bab69377-5e81-4d7f-a108-fa48e29f6183"],
+ " finds a simpler diagram of the same knot or link. "
+}], "Text",ExpressionUUID->"c2ba06a7-dffa-4ce9-bb39-20e6737c12f1"],
+
+Cell["Calling Convention", "Section",ExpressionUUID->"fda62f29-b0a7-4b60-a593-167d02bdbb02"],
+
+Cell["KnoodleSimplify[input]", "Program",ExpressionUUID->"0e5cb4ff-b00b-46d9-a641-25d9a110ba81"],
+
+Cell[TextData[{
+ "returns a ",
+ Cell[BoxData[Cell["PlanarDiagramComplex",
+   Background->None,ExpressionUUID->"c08c89ef-eb36-4c4d-b13a-9eece9a2f0a5"]], 
+  "InlineCode",ExpressionUUID->"0e0415da-bd38-48ff-96a4-040e9d536b09"],
+ " object representing the simplified diagram. This object can be passed \
+directly to ",
+ Cell[BoxData[Cell["KnoodleDraw",
+   Background->None,ExpressionUUID->"516a8878-e289-43fc-8958-f9ed25541450"]], 
+  "InlineCode",ExpressionUUID->"f7ffbdb5-07fe-48dd-9879-08d7e61fdb6f"],
+ " (to see the simplified picture) or ",
+ Cell[BoxData[Cell["KnoodleIdentify",
+   Background->None,ExpressionUUID->"b41caf03-1383-4bbe-acc6-eb2b49871893"]], 
+  "InlineCode",ExpressionUUID->"cea7acac-8a8d-4687-9a07-c9aa2ff4b123"],
+ " (to look it up in the knot table). "
+}], "Text",ExpressionUUID->"3edf62bf-60e9-49f7-aabb-1a389efd4210"],
+
+Cell["Input Formats", "Section",ExpressionUUID->"1dc0541f-aad5-4e4d-a07f-e7829b88612b"],
+
+Cell[TextData[{
+ StyleBox["input", "TI"],
+ " accepts the same representations as ",
+ Cell[BoxData[Cell["KnoodleDraw",
+   Background->None,ExpressionUUID->"fb4eb9e6-f59c-4aca-87f3-00a5ad7c790c"]], 
+  "InlineCode",ExpressionUUID->"11d1d6aa-9108-41c6-bec5-f3c57542c305"],
+ ": a ",
+ Cell[BoxData[
+  TemplateBox[{
+   "KnotData", "paclet:ref/KnotData", 
+    "https://reference.wolfram.com/language/ref/KnotData.html"},
+   "TextRefLink",
+   DisplayFunction->(TagBox[
+     ButtonBox[
+      StyleBox[#, ShowStringCharacters -> True, FontFamily -> 
+       "Source Sans Pro"], 
+      BaseStyle -> {"Link", FontColor -> LightDarkSwitched[
+          RGBColor[0.02, 0.286, 0.651], 
+          RGBColor[0.2823, 0.6666, 0.949]]}, ButtonData -> #2, ContentPadding -> 
+      False], 
+     MouseAppearanceTag["LinkHand"]]& )]],ExpressionUUID->
+  "69a45b41-2c18-4ad8-949e-f559691eb696"],
+ " specification, a PD code / DTCode / GaussCode from the KnotTheory package, \
+a 3D space curve (or a list of curves, for a link), a native Knoodle PD code, \
+or a ",
+ Cell[BoxData[Cell["PlanarDiagramComplex",
+   Background->None,ExpressionUUID->"b7a202c6-b0fb-4585-8510-9dc06b6d9c60"]], 
+  "InlineCode",ExpressionUUID->"159c88fa-6b15-458e-a049-54c2a48d7c4b"],
+ " from an earlier ",
+ Cell[BoxData[Cell["KnoodleSimplify",
+   Background->None,ExpressionUUID->"8aa30c91-7e6c-4c22-9a29-fcbaccd11e7a"]], 
+  "InlineCode",ExpressionUUID->"afdeff57-7fa2-425a-9908-b155567a6e63"],
+ " call. "
+}], "Text",ExpressionUUID->"c7001896-36cb-4ca7-84ad-18756651c977"],
+
+Cell["Examples", "Section",ExpressionUUID->"236ac3f5-c282-4f08-b7c3-62debbee9e7a"],
+
+Cell["Simplify a knot, then draw the simplified result: ", "Text",ExpressionUUID->"209ddefd-0fc3-4057-9164-3118a1edc326"],
+
+Cell["\<\
+simplified = KnoodleSimplify[Knot[6, 2]];
+KnoodleDraw[simplified]\
+\>", "Program",ExpressionUUID->"43e87071-c7c7-4778-9982-833b99a4b0a5"]
+},
+FrontEndVersion->"15.0 for Mac OS X ARM (64-bit) (May 19, 2026)",
+StyleDefinitions->"Default.nb",
+ExpressionUUID->"5d7d6ebc-1d31-4ad6-88ad-1a03453121f7"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[554, 20, 87, 0, 87, "Title",ExpressionUUID->"5fd518cb-7fa0-41fa-bc37-adb922c2d45b"],
+Cell[644, 22, 403, 6, 87, "Text",ExpressionUUID->"a146d182-6d8b-49df-8b95-22a474525b4f"],
+Cell[1050, 30, 471, 7, 87, "Text",ExpressionUUID->"c2ba06a7-dffa-4ce9-bb39-20e6737c12f1"],
+Cell[1524, 39, 92, 0, 87, "Section",ExpressionUUID->"fda62f29-b0a7-4b60-a593-167d02bdbb02"],
+Cell[1619, 41, 96, 0, 87, "Program",ExpressionUUID->"0e5cb4ff-b00b-46d9-a641-25d9a110ba81"],
+Cell[1718, 43, 836, 15, 87, "Text",ExpressionUUID->"3edf62bf-60e9-49f7-aabb-1a389efd4210"],
+Cell[2557, 60, 87, 0, 87, "Section",ExpressionUUID->"1dc0541f-aad5-4e4d-a07f-e7829b88612b"],
+Cell[2647, 62, 1517, 33, 87, "Text",ExpressionUUID->"c7001896-36cb-4ca7-84ad-18756651c977"],
+Cell[4167, 97, 82, 0, 87, "Section",ExpressionUUID->"236ac3f5-c282-4f08-b7c3-62debbee9e7a"],
+Cell[4252, 99, 121, 0, 87, "Text",ExpressionUUID->"209ddefd-0fc3-4057-9164-3118a1edc326"],
+Cell[4376, 101, 147, 3, 87, "Program",ExpressionUUID->"43e87071-c7c7-4778-9982-833b99a4b0a5"]
+}
+]
+*)
+
+(* End of internal cache information *)

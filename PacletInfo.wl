@@ -6,6 +6,7 @@ PacletObject[<|
   "Creator" -> "Jason Cantarella",
   "License" -> "MIT",
   "Extensions" -> {
-    {"Kernel", "Root" -> "Kernel", "Context" -> "Knoodle`"}
+    {"Kernel", "Root" -> "Kernel", "Context" -> "Knoodle`"},
+    {"Documentation", "Language" -> "English", "MainPage" -> "Guides/Knoodle"}
   }
 |>]
