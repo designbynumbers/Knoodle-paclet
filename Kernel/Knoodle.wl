@@ -56,21 +56,30 @@ tempFile[prefix_String, extension_String] :=
 (* File[path] input (multi-component 3D / .kndlxyz -- see toTSV) can't be piped
    through --streaming-mode, which only reads stdin; knoodlesimplify's file mode
    needs an explicit --output. Draw-from-file likewise takes the path as a
-   trailing argument instead of stdin. *)
-runGeometry[in_, simplify_, extraFlags_List] := Module[{tsv, out, gridFlags},
+   trailing argument instead of stdin.
+   randomizeQ is --randomize-projection: only meaningful for 3D geometry read
+   from stdin (single-component point lists), where the default projection is
+   straight down the z axis and can degenerate on vertical segments. It's
+   applied to whichever tool actually reads that geometry -- knoodlesimplify
+   when simplifying first, knoodledraw otherwise. The .kndlxyz file path
+   (ProcessXYZFile in knoodledraw.cpp) doesn't read this flag at all yet, so
+   it's deliberately not added to either file-mode call below -- it would be a
+   silent no-op there. *)
+runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False] := Module[{tsv, out, gridFlags, randFlag},
   gridFlags = {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]};
+  randFlag = If[TrueQ[randomizeQ], {"--randomize-projection"}, {}];
   tsv = Which[
      TrueQ[simplify] && Head[in] === File,
       Module[{outFile = tempFile["knoodle-simplified-", ".tsv"]},
        RunProcess[{exe["knoodlesimplify"], "--output=" <> outFile, First[in]}];
        Import[outFile, "Text"]],
      TrueQ[simplify],
-      RunProcess[{exe["knoodlesimplify"], "--streaming-mode"}, "StandardOutput", in],
+      RunProcess[Join[{exe["knoodlesimplify"], "--streaming-mode"}, randFlag], "StandardOutput", in],
      Head[in] === File, None,  (* draw directly from the file, no simplify step *)
      True, in];
   out = If[tsv === None,
      RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, {First[in]}], "StandardOutput"],
-     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags], "StandardOutput", tsv]];
+     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, randFlag], "StandardOutput", tsv]];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
 
@@ -339,10 +348,16 @@ KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
    (a non-negative integer, 0-based; Automatic, the default, is OrthoDraw's own
    default -- the largest face by arc count). Applies uniformly to every summand
    of a multi-summand diagram. PlotLegends -> Automatic adds a legend matching
-   each link component's color to its (global) component number. *)
+   each link component's color to its (global) component number.
+   "RandomizeProjection" (True by default): apply a random shear before
+   projecting 3D geometry to a diagram. The default projection is straight
+   down the z axis, which can degenerate on vertical/coplanar segments,
+   so this defaults on; set to False to get the plain z-axis projection
+   (e.g. for reproducibility). Only meaningful for 3D input read from stdin
+   (KnotData/space-curve/point-list inputs); a no-op otherwise. *)
 Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {},
    "Checkerboard" -> False, "Labels" -> {}, "ExteriorFace" -> Automatic, PlotLegends -> None,
-   ImageSize -> 340, "Thickness" -> 7};
+   "RandomizeProjection" -> True, ImageSize -> 340, "Thickness" -> 7};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet, extFlag},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
@@ -350,7 +365,8 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
   extFlag = Replace[OptionValue["ExteriorFace"],
      {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}];
-  geos = runGeometry[tsv, simp, Join[layoutFlags[OptionValue["LayoutOptions"]], extFlag]];
+  geos = runGeometry[tsv, simp, Join[layoutFlags[OptionValue["LayoutOptions"]], extFlag],
+    TrueQ[OptionValue["RandomizeProjection"]]];
   If[geos === {}, Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
   render[geos, OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"],
