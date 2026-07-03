@@ -1,0 +1,104 @@
+# Knoodle-paclet TODO
+
+## Documentation Center reference pages (last remaining item)
+
+**Status**: skeletal but working. Reference pages exist for `KnoodleDraw`,
+`KnoodleSimplify`, `KnoodleIdentify`
+(`Documentation/English/ReferencePages/Symbols/*.nb` — note **plural**
+`Symbols`, confirmed against Wolfram.app's own
+`SystemFiles/Components/PacletTools/Examples/Greetings` example paclet;
+singular `Symbol` silently breaks `?symbol` lookup with no error, just
+falls back to a raw internal-code dump), plus a one-paragraph skeleton
+Guide page (`Documentation/English/Guides/Knoodle.nb`). `PacletInfo.wl` has
+the `"Documentation"` extension wired up.
+
+**Verified working end-to-end**, in a real front-end session (not just the
+headless kernel this was mostly built against): `?KnoodleDraw` shows the
+usage text plus a "Documentation → Local »" link, and clicking it opens the
+actual reference page — correct `ObjectName`/`Usage`/real worked
+`Examples` (with genuine evaluated Input/Output pairs, not just
+illustrative text).
+
+**Remaining cosmetic defect**: the `Categorization` section (pure
+search-index metadata — Entity Type/Paclet Name/Context/URI, not
+reader-facing content) renders expanded and prominent at the top of each
+reference page, instead of being hidden/collapsed the way real WRI
+reference pages present it. Confirmed this is *not* a `CellGroupData[...,
+Open]` vs. `Closed` issue (tried `Closed`, no change — even `SayHello.nb`,
+a genuine WRI-authored example, has this section `Open` in its raw file).
+
+This is apparently the job of `PacletDocumentationBuild` (from the
+`PacletTools` system paclet — "Paclet documentation authored with
+DocumentationTools will be built into styled notebooks," per its own
+reference page), but its actual behavior proved opaque and was not solved
+this session:
+
+- `PacletDocumentationBuild[pacletObjectOrDirectory]` only ever scanned
+  `Guides/Knoodle.nb`, never the three `ReferencePages/Symbols/*.nb` files
+  — regardless of passing a `PacletObject` (via `PacletFind["Knoodle"]`)
+  vs. a bare directory string, `OverwriteTarget -> True`, or a guessed
+  `"Notebooks" -> {...}` option (which may not even be a real option name
+  for this function — genuinely undocumented, found no reference for it).
+- It refuses to process even `Guides/Knoodle.nb`, failing with
+  `` DocumentationBuild`Info`GetNotebookCategorization::val: "Entity Type"
+  value not found in notebook `` — meaning the Guide page needs its *own*
+  `Categorization` section (presumably `"Entity Type" -> "Guide"`, by
+  analogy with the `"Entity Type" -> "Symbol"` convention on reference
+  pages) before the build tool will even proceed past it.
+- **Real clue for whoever picks this up**: despite the `Success[...]`
+  return value reporting `SuccessfulFilesCount -> 0`, a `build/` directory
+  (gitignored, not committed) appeared in the repo root afterward,
+  containing what look like *processed* copies of all three reference
+  pages (`build/Knoodle/Documentation/English/ReferencePages/Symbols/*.nb`)
+  plus a `SearchIndex`/`Index`/`SpellIndex`. This strongly suggests the
+  build tool *did* do something useful with the reference pages despite
+  the confusing terminal output/return value — this directory (if it
+  still exists locally, or by re-running the build) is very likely the
+  fastest way to see what a "properly built" reference page should
+  actually look like, and to diff against the current source `.nb` files
+  to figure out what transformation is missing.
+
+**Next steps for whoever picks this up**:
+1. Add a `Categorization` section to `Guides/Knoodle.nb`
+   (`"Entity Type" -> "Guide"`, `"Paclet Name" -> "Knoodle"`,
+   `"URI" -> "Knoodle/guide/Knoodle"` or similar — verify the exact
+   convention against a real guide page's *source* form if one can be
+   found, not a built one like `WSMLink.nb` was).
+2. Re-run `PacletDocumentationBuild` and see if it now proceeds past the
+   Guide page and actually processes the reference pages.
+3. Inspect the `build/` output directory for the already-processed
+   versions from the earlier attempt — compare against
+   `Documentation/English/ReferencePages/Symbols/*.nb` to see exactly what
+   changed structurally.
+4. Re-verify in a live front-end session (same check as before: `?symbol`
+   → "Documentation → Local" → does the Categorization section render
+   collapsed now).
+
+This was deliberately deferred (explicit user decision) rather than chased
+further, since the functionally important part — `?symbol` correctly
+resolving to a real, correct reference page — was already confirmed
+working, and this remaining issue is purely cosmetic.
+
+## Content reference for filling out the reference pages
+
+The three existing reference pages are intentionally skeletal (one option
+mentioned, one minimal example each, matching an explicit "skeletal
+documentation" scope for this pass). `/markdown-docs/*.md` in this repo
+contains **skeletal-but-feature-complete** Markdown documentation for
+`KnoodleDraw`, `KnoodleSimplify`, `KnoodleIdentify`, and `KnotSymbol` —
+full option tables, all input formats, known implementation pitfalls/
+gotchas found the hard way (with enough detail to explain *why*, not just
+*what*), and multiple worked examples per function. Written from the
+session that built these functions, specifically so a future Claude
+session (with less standing context) has a single, dense source of truth
+to draw on when writing the real "Details and Options" / "Examples"
+sections of the Mathematica reference pages, without needing to
+re-derive everything from the C++ source and WL package source again from
+scratch.
+
+`PlanarDiagramComplex` does not yet have its own reference page or a
+dedicated markdown file — it's covered in reasonable depth inside
+`markdown-docs/KnoodleSimplify.md` (as `KnoodleSimplify`'s return type),
+which may be sufficient, or may warrant promoting to its own page/file
+later if it ends up needing more standalone treatment (e.g. if more
+functions start returning/consuming it directly).
