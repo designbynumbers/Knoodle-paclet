@@ -20,35 +20,35 @@ WindowFrame->Normal*)
 Notebook[{
 
 Cell[CellGroupData[{
-Cell["Categorization", "CategorizationSection",ExpressionUUID->"29f00d96-7064-4dc8-9906-5f832dabeb17"],
+Cell["Categorization", "CategorizationSection",ExpressionUUID->"97575fb2-6379-4e2b-a7b4-2a4ab7686137"],
 
 Cell["Symbol", "Categorization",
  CellLabel->
-  "Entity Type",ExpressionUUID->"c05e207c-468c-4641-8f83-fa51c2342357"],
+  "Entity Type",ExpressionUUID->"b9215889-af19-429c-a6f1-9c05b92ab7ab"],
 
 Cell["Knoodle", "Categorization",
  CellLabel->
-  "Paclet Name",ExpressionUUID->"81b1c1c3-6546-4098-9bfb-5ba3a3ae5897"],
+  "Paclet Name",ExpressionUUID->"71f06a96-8d05-4e46-a46a-026a97d811fe"],
 
 Cell["Knoodle`", "Categorization",
- CellLabel->"Context",ExpressionUUID->"5d327d0e-acbb-4649-b903-77489cdaa696"],
+ CellLabel->"Context",ExpressionUUID->"20eb9a53-8476-42dd-aa28-843e08cacb0d"],
 
 Cell["Knoodle/ref/KnoodleIdentify", "Categorization",
- CellLabel->"URI",ExpressionUUID->"1f08ae75-de29-4f91-a5de-5c36fd8ed6db"]
-}, Open  ]],
+ CellLabel->"URI",ExpressionUUID->"e3226884-18ec-41d5-b02e-4c0635947c17"]
+}, Closed]],
 
 Cell[CellGroupData[{
 
-Cell["KnoodleIdentify", "ObjectName",ExpressionUUID->"68bb59ee-ff8b-445b-9bc6-f0b3429159f1"],
+Cell["KnoodleIdentify", "ObjectName",ExpressionUUID->"e3a3ecab-2881-4610-91f4-c45bd72d5756"],
 
 Cell[TextData[{
- Cell["   ", "ModInfo",ExpressionUUID->"4ec1549d-4157-4e30-a74b-a25d3ee01549"],
+ Cell["   ", "ModInfo",ExpressionUUID->"d3040e1f-ed6d-4a41-9a95-d9223fd35de4"],
  Cell[BoxData[
   RowBox[{"KnoodleIdentify", "[", "input", "]"}]], "InlineFormula",
-  ExpressionUUID->"68d46c75-4124-4f94-b528-b4742dbd99a6"],
+  ExpressionUUID->"3a87976a-fc94-4a49-b90c-42dff1ae9cc6"],
  "\[LineSeparator]identifies a knot by looking up the diagram in a table of \
 named knots."
-}], "Usage",ExpressionUUID->"add0985b-fd76-4bbe-8b74-dd4a062264b8"],
+}], "Usage",ExpressionUUID->"f3705bc3-c349-468e-8a35-efa059ac7a4b"],
 
 Cell["\<\
 Returns an Association from each identified knot summand (a KnotSymbol[...]) \
@@ -56,7 +56,7 @@ to its multiplicity in the connect-sum decomposition. An unknot gives <||>. \
 KnoodleIdentify only identifies knots; a genuine link (more than one \
 component) fails with a message. input accepts the same representations as \
 KnoodleDraw.\
-\>", "Notes",ExpressionUUID->"8b0ac0c7-e7b8-4cec-a875-49419f454c9a"]
+\>", "Notes",ExpressionUUID->"6cb357cc-7bd3-4931-9363-4ed8a25e893d"]
 }, Open  ]],
 
 Cell[CellGroupData[{
@@ -66,11 +66,11 @@ Cell[BoxData[
     {
      StyleBox["Examples", "PrimaryExamplesSection"], ""}
    }],
-  $Line = 0; Null]], "PrimaryExamplesSection",ExpressionUUID->"6ff3d6df-48fa-\
-4819-aec2-8135c3ca24a0"],
+  $Line = 0; Null]], "PrimaryExamplesSection",ExpressionUUID->"4c714afa-f62c-\
+43a1-97f7-4a322e93118d"],
 
 Cell[BoxData[
- RowBox[{"Needs", "[", "\"\<Knoodle`\>\"", "]"}]], "Input",ExpressionUUID->"16864cfa-6232-498b-a697-0980eea084c4"],
+ RowBox[{"Needs", "[", "\"\<Knoodle`\>\"", "]"}]], "Input",ExpressionUUID->"8fc2dd3b-609c-447e-9137-187ced258f67"],
 
 Cell[CellGroupData[{
 
@@ -79,7 +79,7 @@ Cell[BoxData[
   RowBox[{"KnoodleIdentify", "[", 
    RowBox[{"Knot", "[", 
     RowBox[{"3", ",", "1"}], "]"}], "]"}],
-  HoldForm]], "Input",ExpressionUUID->"752bf6bf-d6ed-4c56-a777-a8347af170b0"],
+  HoldForm]], "Input",ExpressionUUID->"36e9a153-534d-4b14-b37e-170314bf0de1"],
 
 Cell[BoxData[
  RowBox[{"\[LeftAssociation]", 
@@ -89,8 +89,8 @@ Cell[BoxData[
       SubscriptBox["3", "1"], "\"m/mr\""},
      "Superscript"],
     Knoodle`KnotSymbol[3, 1, True, "m/mr"]], "\[Rule]", "1"}], 
-  "\[RightAssociation]"}]], "Output",ExpressionUUID->"23e06a4a-b144-4e45-bdc0-\
-79e2d6ac0758"]
+  "\[RightAssociation]"}]], "Output",ExpressionUUID->"68832d51-9332-455c-b065-\
+41d89e91ee0d"]
 }, Open  ]]
 }, Open  ]]
 },
@@ -111,23 +111,23 @@ CellTagsIndex->{}
 (*NotebookFileOutline
 Notebook[{
 Cell[CellGroupData[{
-Cell[576, 22, 102, 0, 87, "CategorizationSection",ExpressionUUID->"29f00d96-7064-4dc8-9906-5f832dabeb17"],
-Cell[681, 24, 117, 2, 87, "Categorization",ExpressionUUID->"c05e207c-468c-4641-8f83-fa51c2342357"],
-Cell[801, 28, 118, 2, 87, "Categorization",ExpressionUUID->"81b1c1c3-6546-4098-9bfb-5ba3a3ae5897"],
-Cell[922, 32, 112, 1, 87, "Categorization",ExpressionUUID->"5d327d0e-acbb-4649-b903-77489cdaa696"],
-Cell[1037, 35, 127, 1, 87, "Categorization",ExpressionUUID->"1f08ae75-de29-4f91-a5de-5c36fd8ed6db"]
+Cell[576, 22, 102, 0, 87, "CategorizationSection",ExpressionUUID->"97575fb2-6379-4e2b-a7b4-2a4ab7686137"],
+Cell[681, 24, 117, 2, 87, "Categorization",ExpressionUUID->"b9215889-af19-429c-a6f1-9c05b92ab7ab"],
+Cell[801, 28, 118, 2, 87, "Categorization",ExpressionUUID->"71f06a96-8d05-4e46-a46a-026a97d811fe"],
+Cell[922, 32, 112, 1, 87, "Categorization",ExpressionUUID->"20eb9a53-8476-42dd-aa28-843e08cacb0d"],
+Cell[1037, 35, 127, 1, 87, "Categorization",ExpressionUUID->"e3226884-18ec-41d5-b02e-4c0635947c17"]
+}, Closed]],
+Cell[CellGroupData[{
+Cell[1201, 41, 92, 0, 87, "ObjectName",ExpressionUUID->"e3a3ecab-2881-4610-91f4-c45bd72d5756"],
+Cell[1296, 43, 397, 7, 87, "Usage",ExpressionUUID->"f3705bc3-c349-468e-8a35-efa059ac7a4b"],
+Cell[1696, 52, 397, 6, 87, "Notes",ExpressionUUID->"6cb357cc-7bd3-4931-9363-4ed8a25e893d"]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[1201, 41, 92, 0, 87, "ObjectName",ExpressionUUID->"68bb59ee-ff8b-445b-9bc6-f0b3429159f1"],
-Cell[1296, 43, 397, 7, 87, "Usage",ExpressionUUID->"add0985b-fd76-4bbe-8b74-dd4a062264b8"],
-Cell[1696, 52, 397, 6, 87, "Notes",ExpressionUUID->"8b0ac0c7-e7b8-4cec-a875-49419f454c9a"]
-}, Open  ]],
+Cell[2130, 63, 216, 6, 87, "PrimaryExamplesSection",ExpressionUUID->"4c714afa-f62c-43a1-97f7-4a322e93118d"],
+Cell[2349, 71, 128, 1, 87, "Input",ExpressionUUID->"8fc2dd3b-609c-447e-9137-187ced258f67"],
 Cell[CellGroupData[{
-Cell[2130, 63, 216, 6, 87, "PrimaryExamplesSection",ExpressionUUID->"6ff3d6df-48fa-4819-aec2-8135c3ca24a0"],
-Cell[2349, 71, 128, 1, 87, "Input",ExpressionUUID->"16864cfa-6232-498b-a697-0980eea084c4"],
-Cell[CellGroupData[{
-Cell[2502, 76, 203, 5, 87, "Input",ExpressionUUID->"752bf6bf-d6ed-4c56-a777-a8347af170b0"],
-Cell[2708, 83, 319, 9, 87, "Output",ExpressionUUID->"23e06a4a-b144-4e45-bdc0-79e2d6ac0758"]
+Cell[2502, 76, 203, 5, 87, "Input",ExpressionUUID->"36e9a153-534d-4b14-b37e-170314bf0de1"],
+Cell[2708, 83, 319, 9, 87, "Output",ExpressionUUID->"68832d51-9332-455c-b065-41d89e91ee0d"]
 }, Open  ]]
 }, Open  ]]
 }
