@@ -23,6 +23,9 @@ notes[s_] := Cell[s, "Notes"];
 optRow[nameBox_, defBox_, desc_String] :=
   {Cell["      ", "ModInfo"], nameBox, defBox, Cell[desc, "TableText"]};
 
+(* Shared PD-code explainer cells (defines pdExplainerCells). *)
+Get[FileNameJoin[{DirectoryName[$InputFileName], "pd-explainer.wls"}]];
+
 categorization = Cell[CellGroupData[{
    Cell["Categorization", "CategorizationSection"],
    Cell["Symbol", "Categorization", CellLabel -> "Entity Type"],
@@ -176,7 +179,7 @@ examplesSection = Cell[CellGroupData[Flatten[{
            "PrimaryExamplesSection"], ""}}], $Line = 0; Null]],
      "PrimaryExamplesSection"],
     silent[HoldForm[Needs["Knoodle`"]]],
-    ex1, ex2, ex3, ex4, ex5, exMutants, exCosets, ex6, ex7, ex8}], Open]];
+    ex1, ex2, pdExplainerCells, ex3, ex4, ex5, exMutants, exCosets, ex6, ex7, ex8}], Open]];
 
 nb = Notebook[{categorization, usageSection, examplesSection},
    StyleDefinitions -> FrontEnd`FileName[{"Wolfram"},

@@ -31,6 +31,9 @@ optRow[nameBox_, defBox_, desc_String] :=
   {Cell["      ", "ModInfo"], nameBox, defBox, Cell[desc, "TableText"]};
 
 (* ---------- header / usage / notes ---------- *)
+(* Shared PD-code explainer cells (defines pdExplainerCells). *)
+Get[FileNameJoin[{DirectoryName[$InputFileName], "pd-explainer.wls"}]];
+
 categorization = Cell[CellGroupData[{
    Cell["Categorization", "CategorizationSection"],
    Cell["Symbol", "Categorization", CellLabel -> "Entity Type"],
@@ -121,12 +124,8 @@ with well over a hundred crossings:"],
 is a trefoil:"],
    (SeedRandom[103]; group[HoldForm[KnoodleDraw[P, ImageSize -> 200]]])};
 
-ex3 = {
-   delim,
-   text["A native Knoodle PD code (here rows of 4 integers) is an explicit \
-diagram, drawn exactly as given:"],
-   silent[HoldForm[pd = {{0, 3, 1, 4}, {2, 5, 3, 0}, {4, 1, 5, 2}};]],
-   group[HoldForm[KnoodleDraw[pd]]]};
+(* Native PD code input: the shared explainer (drawn exactly as given). *)
+ex3 = pdExplainerCells;
 
 ex4 = {
    delim,
@@ -145,7 +144,8 @@ faces of a diagram:"],
 ex6 = {
    delim,
    text["\"CornerRadius\" runs from 0 (sharp corners) to 1/2 (maximally \
-rounded):"],
+rounded), here on a trefoil PD code:"],
+   silent[HoldForm[pd = {{0, 3, 1, 4}, {2, 5, 3, 0}, {4, 1, 5, 2}};]],
    group[HoldForm[Row[Table[KnoodleDraw[pd, "CornerRadius" -> r,
         ImageSize -> 160], {r, {0, 1/2}}], Spacer[20]]]]};
 

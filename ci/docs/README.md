@@ -15,6 +15,10 @@ cache).
 | `gen-knoodleidentify-nb.wls` | `KnoodleIdentify.nb` |
 | `gen-knotsymbol-nb.wls` | `KnotSymbol.nb` |
 
+`pd-explainer.wls` holds the shared PD-code explainer cells (a labeled,
+oriented 5_2 with its code and a row walkthrough) spliced into the Examples
+of all three function pages — edit it once, regenerate all three.
+
 Run from anywhere:
 
     wolframscript -file ci/docs/gen-knoodledraw-nb.wls
