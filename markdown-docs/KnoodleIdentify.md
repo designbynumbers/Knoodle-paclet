@@ -68,6 +68,15 @@ redundant/unnecessary work, not wrong.
   resolve; if it doesn't, either the table has a real gap or something else
   went wrong) as opposed to `Unidentified`, which is simply expected/normal
   for large inputs.
+- **Update 2026-07-03 — the 13/16 boundary quirk**: upstream bumped
+  `Klut::max_crossing_count` from 13 to 16 (`src/Klut.hpp`; the table is
+  being extended) while the data still stops at 13, and the classification
+  boundary in `tools/klut_identify.hpp` follows the *constant*, not the
+  tables actually loaded. Net effect today: 14-16-crossing summands come
+  back `NotFound` (wrongly "suspicious") instead of `Unidentified`;
+  17-and-up correctly give `Unidentified`. Verified with (2,15) vs (2,17)
+  torus knots. Upstream fix tracked in TODO.md; the reference page's
+  Unidentified example uses (2,17) so it holds before and after the fix.
 - **A genuine link** (see next section): fails outright, does not appear as
   a value in a returned Association at all.
 
@@ -86,16 +95,28 @@ either mis-identifying it or silently ignoring the restriction).
 
 Not currently exposed as WL options (available only via the raw
 `knoodleidentify` CLI, not surfaced through this function at all):
-`--data-dir` (KLUT data directory override — auto-detected relative to the
-binary's location, `data/Klut` next to the executable's parent directory;
-this already resolves correctly for the paclet's dev-mode
-`$KnoodleBinaryDirectory` setup, so there was no pressing need to expose
-it), `--expanded` (alternate one-line-per-knot output joined by `' # '`
+`--data-dir` (KLUT data directory — since the Asset-extension work of
+2026-07-03 the wrapper always passes `--data-dir=$KnoodleDataDirectory`
+explicitly, resolved via `AssetLocation` with a dev fallback to the sibling
+~/Knoodle checkout, so the CLI's own auto-detection is no longer relied
+on), `--expanded` (alternate one-line-per-knot output joined by `' # '`
 using raw `K[...]` table names instead of an `Association`), `--tsv`
 (per-summand tab-separated output), `--quiet` (suppresses the stderr
 summary — irrelevant to the WL wrapper anyway, since `RunProcess[...,
 "StandardOutput", ...]` only ever captures stdout, confirmed the summary
 line is cleanly stderr-only).
+
+## Geometry input: straight-down-z projection only (no randomization)
+
+Found 2026-07-03: unlike `knoodlesimplify`/`knoodledraw`, `knoodleidentify`
+has **no** `--randomize-projection` flag, so 3D-geometry input is projected
+straight down the z axis. A highly symmetric curve (e.g. an exact
+torus-knot parametrization) produces a degenerate projection and the
+identification fails — and the WL wrapper currently returns bare `$Failed`
+with *no message* (empty stdout through `ToExpression`). Workaround,
+documented on the reference page: rotate the curve into general position
+first (`RotationTransform[0.4, {1,2,3}] /@ pts`). Upstream flag + WL
+option + a proper failure message are tracked in TODO.md.
 
 ## Link handling: fails, does not return `<|Link[n]->1|>`
 

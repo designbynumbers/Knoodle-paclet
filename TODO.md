@@ -1,6 +1,34 @@
 # Knoodle-paclet TODO
 
-## Bug: KnoodleDraw/KnoodleSimplify of a plain unknot returns $Failed
+## KLUT 14-16-crossing NotFound quirk — NO ACTION (decision 2026-07-03)
+
+Found while writing the KnoodleIdentify reference page:
+`Klut::max_crossing_count` is already 16 in `src/Klut.hpp` but the data
+tables stop at 13, so a 14-16-crossing knot currently comes back
+`NotFound[n, pd]` ("suspicious") instead of `Unidentified[n, pd]` ("beyond
+the table"). Jason: the table extension to 16 crossings is in progress, so
+this window closes by itself — do not "fix" the classification boundary.
+The reference page's Unidentified example deliberately uses a (2,17) torus
+knot so it is correct both before and after the data lands.
+
+## Upstream (handed off): knoodleidentify has no --randomize-projection
+
+`knoodlesimplify`/`knoodledraw` accept `--randomize-projection`,
+`knoodleidentify` does not — so symmetric 3D input hits the degenerate
+straight-down-z projection and KnoodleIdentify fails, *silently* (bare
+`$Failed`, empty stdout -> ToExpression). Handed off to the upstream repo:
+`~/Knoodle/handoff/knoodleidentify-randomize-projection/ROUND-1.md`
+(tools/-only fix, to be done in a ~/Knoodle session). Paclet follow-ups once
+it lands + submodule bump: wire a "RandomizeProjection" option through
+`runIdentify`; independently, add a WL message instead of silent `$Failed`
+on empty knoodleidentify output. The reference page documents the interim
+workaround (rotate into general position first).
+
+## Bug (handed off): KnoodleDraw/KnoodleSimplify of a plain unknot returns $Failed
+
+Handed off to the upstream repo:
+`~/Knoodle/handoff/knoodlesimplify-streaming-unknot-empty-output/ROUND-1.md`.
+Original notes follow.
 
 Found 2026-07-03 while testing the thickness fix. A 3D curve that simplifies
 to a bare 0-crossing unknot (e.g. a sampled round circle) makes

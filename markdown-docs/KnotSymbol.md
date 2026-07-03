@@ -1,11 +1,11 @@
 # KnotSymbol
 
-Reference material for a possible future
-`Documentation/English/ReferencePages/Symbols/KnotSymbol.nb` (does not exist
-yet — only `KnoodleDraw`/`KnoodleSimplify`/`KnoodleIdentify` currently have
-reference pages; `KnotSymbol` and `PlanarDiagramComplex` are documented only
-via their `::usage` strings so far). Written from the session that built
-this display formatting; referenced from `KnoodleIdentify.md`.
+Reference material for
+`Documentation/English/ReferencePages/Symbols/KnotSymbol.nb` (created
+2026-07-03 from this file; `PlanarDiagramComplex` remains documented only
+via its `::usage` string and inside `KnoodleSimplify`'s page). Written from
+the session that built this display formatting; referenced from
+`KnoodleIdentify.md`.
 
 ## What it is
 

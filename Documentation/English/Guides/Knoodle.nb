@@ -87,8 +87,10 @@ Cell[TextData[{
 
 Cell[TextData[{
  Cell[BoxData[
-  StyleBox["KnotSymbol", "InlineFormula"]],
-  "InlineFormula",ExpressionUUID->"6ea61f1f-0416-4ce1-b114-18dd976ff4bf"],
+  ButtonBox["KnotSymbol",
+   BaseStyle->"Link",
+   ButtonData->"paclet:Knoodle/ref/KnotSymbol"]],
+  "InlineGuideFunction",ExpressionUUID->"6ea61f1f-0416-4ce1-b114-18dd976ff4bf"],
  " \[LongDash] an identified-knot symbol, as returned by ",
  Cell[BoxData[
   ButtonBox["KnoodleIdentify",
