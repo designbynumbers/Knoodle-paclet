@@ -75,13 +75,11 @@ built form) on this machine:
   `MIMETypeToFormatList::fmterr` — are benign DocumentationBuild internals;
   they fail no file.)
 
-**Remaining doc work (the actual distribution bug — was item (b)):** the
-paclet's `Documentation` extension still ships the **source authoring**
-`Documentation/` folder, so an *installed* user sees raw Categorization and
-gets no search index. The `.paclet` must ship the **built**
-`build/Knoodle/Documentation/` instead. Wire `PacletDocumentationBuild` +
-`PacletBuild` (or the `WolframResearch/PacletCICD` `build-paclet` action) into
-CI so releases package the built docs. Also: the hand-edited source guide's
+**Remaining doc work (the actual distribution bug — was item (b)): RESOLVED,
+verified 2026-07-03.** `ci/package-paclet.wls`'s `PacletBuild` performs the
+documentation build itself; inspected `build-local/Knoodle-0.0.1.paclet` and
+confirmed the shipped `Documentation/` is the **built** form (SearchIndex +
+SpellIndex present, Categorization folded into TaggingRules). Also: the hand-edited source guide's
 internal cache (`NotebookDataLength`, byte offsets, trailing
 `NotebookFileOutline`) is now stale — harmless (the front end recomputes on
 open/save; the builder reads the real `Notebook[...]` expression), but open +

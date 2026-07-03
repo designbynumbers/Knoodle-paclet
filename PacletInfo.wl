@@ -26,8 +26,15 @@ PacletObject[<|
         {"knoodledraw", "knoodledraw"},
         {"knoodlesimplify", "knoodlesimplify"},
         {"knoodleidentify", "knoodleidentify"}}},
-    (* KLUT lookup tables (platform-independent) -- a directory asset the Kernel
-       passes to knoodleidentify via --data-dir. *)
-    {"Asset", "Root" -> "Resources", "Assets" -> {{"KlutData", "Klut"}}}
+    (* Platform-independent data: the KLUT lookup tables (a directory asset
+       the Kernel passes to knoodleidentify via --data-dir), and the hard-
+       unknot example diagrams used by the KnoodleSimplify documentation
+       (Burton et al. 2023, Applebaum et al. 2025 -- see the READMEs there).
+       Unlike the binaries and KLUT data, ExampleData lives in the source
+       repo itself and ships with every build. *)
+    {"Asset", "Root" -> "Resources", "Assets" -> {
+      {"KlutData", "Klut"},
+      {"HardUnknots", "ExampleData/HardUnknots"},
+      {"VeryHardUnknots", "ExampleData/VeryHardUnknots"}}}
   }
 |>]

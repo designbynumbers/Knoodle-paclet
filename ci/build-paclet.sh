@@ -42,6 +42,7 @@ cp "$REPO/PacletInfo.wl" "$STAGE/"
 cp -R "$REPO/Kernel" "$STAGE/Kernel"
 cp -R "$REPO/Documentation" "$STAGE/Documentation"
 mkdir -p "$STAGE/Resources/$SID" "$STAGE/Resources/Klut"
+cp -R "$REPO/Resources/ExampleData" "$STAGE/Resources/ExampleData"
 cp "$BIN/"* "$STAGE/Resources/$SID/"
 chmod +x "$STAGE/Resources/$SID/"* 2>/dev/null || true
 cp "$KND/data/Klut/"Klut_Keys_*.bin "$KND/data/Klut/"Klut_Values_*.tsv "$STAGE/Resources/Klut/"

@@ -98,6 +98,7 @@ cp "$REPO/PacletInfo.wl" "$STAGE/"
 cp -R "$REPO/Kernel" "$STAGE/Kernel"
 cp -R "$REPO/Documentation" "$STAGE/Documentation"
 mkdir -p "$STAGE/Resources/Klut"
+cp -R "$REPO/Resources/ExampleData" "$STAGE/Resources/ExampleData"
 cp "$TBDIR/data/Klut/"Klut_Keys_*.bin "$TBDIR/data/Klut/"Klut_Values_*.tsv "$STAGE/Resources/Klut/"
 for a in "$ART"/knoodle-tools-*; do
   sid="${a##*knoodle-tools-}"
