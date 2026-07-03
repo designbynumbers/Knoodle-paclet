@@ -59,16 +59,21 @@ instead."],
 one component) fails with $Failed and a KnoodleIdentify::link message; apply \
 KnoodleSimplify with \"Unite\" -> True first if the components should be \
 treated as connect-summed into a single knot."],
-   notes["3D geometry is projected straight down the z axis before \
-identification. A highly symmetric curve can produce a degenerate projection \
-and fail; rotate such a curve into general position first (e.g. with \
-RotationTransform)."],
+   notes["3D geometry is randomly rotated before being projected to a \
+diagram, as in KnoodleDraw and KnoodleSimplify -- without this a highly \
+symmetric curve can hit a degenerate projection and fail. Set \
+\"RandomizeProjection\" -> False for the plain z-axis projection; if the \
+projection then degenerates, KnoodleIdentify returns $Failed with a \
+KnoodleIdentify::failed message."],
    notes["The following options can be given:"],
    Cell[BoxData[GridBox[{
       optRow[ToBoxes["MaxCrossings"], "Automatic",
        "restrict the lookup to subtables with at most this many crossings \
 (3 to 13); Automatic is the table's full range. Knots above a restricted \
-range come back as NotFound."]
+range come back as NotFound."],
+      optRow[ToBoxes["RandomizeProjection"], "True",
+       "randomly rotate 3D input before projecting, avoiding degenerate \
+projections; set False for reproducibility"]
       }]], "3ColumnTableMod"]
    }, Open]];
 
@@ -156,10 +161,10 @@ ex6 = {
    delim,
    text["A knot with more crossings than the lookup table covers comes back \
 as Unidentified together with its signed PD code. Here a (2,17) torus knot \
-is sampled and tilted into general position:"],
+is sampled as a space curve:"],
    silent[HoldForm[torus = Most@Table[N@{Cos[2 t] (2 + Cos[17 t]),
          Sin[2 t] (2 + Cos[17 t]), Sin[17 t]}, {t, 0., 2 Pi, 2 Pi/680}];]],
-   group[HoldForm[KnoodleIdentify[RotationTransform[0.4, {1, 2, 3}] /@ torus]]]};
+   group[HoldForm[KnoodleIdentify[torus]]]};
 
 SeedRandom[42];
 ex7 = {

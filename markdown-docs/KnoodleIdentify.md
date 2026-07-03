@@ -92,6 +92,7 @@ either mis-identifying it or silently ignoring the restriction).
 | Option | Default | Meaning |
 |---|---|---|
 | `"MaxCrossings"` | `Automatic` | Maps to `knoodleidentify`'s `--max-crossings`. `Automatic` = the tool's own default (13, the KLUT's current max). Valid range 3-13. Restricts lookup to smaller subtables — smaller/faster, but anything above the restricted range that would otherwise have resolved instead comes back as `NotFound` (not `Unidentified` — the distinction above is based on the tool's *actual* max range, 13, not the caller-restricted one). |
+| `"RandomizeProjection"` | `True` | As in `KnoodleDraw`/`KnoodleSimplify`: randomly rotate 3D geometry before projecting, avoiding degenerate projections. Set `False` for the plain z-axis projection (reproducibility). No-op for explicit diagram input. Added 2026-07-03 once the upstream flag existed. |
 
 Not currently exposed as WL options (available only via the raw
 `knoodleidentify` CLI, not surfaced through this function at all):
@@ -106,17 +107,20 @@ summary — irrelevant to the WL wrapper anyway, since `RunProcess[...,
 "StandardOutput", ...]` only ever captures stdout, confirmed the summary
 line is cleanly stderr-only).
 
-## Geometry input: straight-down-z projection only (no randomization)
+## Geometry input: `"RandomizeProjection"` (resolved 2026-07-03)
 
-Found 2026-07-03: unlike `knoodlesimplify`/`knoodledraw`, `knoodleidentify`
-has **no** `--randomize-projection` flag, so 3D-geometry input is projected
-straight down the z axis. A highly symmetric curve (e.g. an exact
-torus-knot parametrization) produces a degenerate projection and the
-identification fails — and the WL wrapper currently returns bare `$Failed`
-with *no message* (empty stdout through `ToExpression`). Workaround,
-documented on the reference page: rotate the curve into general position
-first (`RotationTransform[0.4, {1,2,3}] /@ pts`). Upstream flag + WL
-option + a proper failure message are tracked in TODO.md.
+Originally `knoodleidentify` had no `--randomize-projection` flag (unlike
+the other two tools), so a highly symmetric curve (e.g. an exact torus-knot
+parametrization) hit a degenerate straight-down-z projection and failed —
+*silently* on the WL side. Fixed the same day: upstream added the flag
+(handoff `knoodleidentify-randomize-projection`, commit 356f9bc), and the
+wrapper now exposes `"RandomizeProjection" -> True` (default, matching
+`KnoodleDraw`/`KnoodleSimplify`). With `False` and a degenerate projection,
+`KnoodleIdentify` now returns `$Failed` **with** a `KnoodleIdentify::failed`
+message (also emitted for any other empty/unparseable tool output) instead
+of failing silently. The same upstream commit fixed `CreateDiagramFrom3D`
+dropping zero-crossing curves, so an already-unknotted 3D curve now
+correctly identifies as `<||>` rather than producing no output.
 
 ## Link handling: fails, does not return `<|Link[n]->1|>`
 

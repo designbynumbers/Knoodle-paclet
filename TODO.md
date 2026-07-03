@@ -11,36 +11,32 @@ this window closes by itself — do not "fix" the classification boundary.
 The reference page's Unidentified example deliberately uses a (2,17) torus
 knot so it is correct both before and after the data lands.
 
-## Upstream (handed off): knoodleidentify has no --randomize-projection
+## RESOLVED (2026-07-03, upstream 356f9bc + paclet follow-ups): the two
+## handed-off geometry bugs
 
-`knoodlesimplify`/`knoodledraw` accept `--randomize-projection`,
-`knoodleidentify` does not — so symmetric 3D input hits the degenerate
-straight-down-z projection and KnoodleIdentify fails, *silently* (bare
-`$Failed`, empty stdout -> ToExpression). Handed off to the upstream repo:
-`~/Knoodle/handoff/knoodleidentify-randomize-projection/ROUND-1.md`
-(tools/-only fix, to be done in a ~/Knoodle session). Paclet follow-ups once
-it lands + submodule bump: wire a "RandomizeProjection" option through
-`runIdentify`; independently, add a WL message instead of silent `$Failed`
-on empty knoodleidentify output. The reference page documents the interim
-workaround (rotate into general position first).
+Both handoffs came back fixed the same day (upstream commit 356f9bc,
+responses in `~/Knoodle/handoff/*/ROUND-1-RESPONSE.md`); submodule bumped,
+paclet follow-ups done:
 
-## Bug (handed off): KnoodleDraw/KnoodleSimplify of a plain unknot returns $Failed
+1. **knoodleidentify --randomize-projection**: flag added upstream exactly
+   as scoped. Paclet side: `"RandomizeProjection" -> True` option wired
+   through `KnoodleIdentify` (matching the other two wrappers), and a new
+   `KnoodleIdentify::failed` message replaces the silent `$Failed` on
+   empty/unparseable tool output. Reference page + markdown docs updated
+   (the RotationTransform workaround text is gone).
+2. **Plain unknot returning $Failed**: root cause was NOT the streaming
+   writer (as ROUND-1 guessed) but `CreateDiagramFrom3D` in
+   `tools/knoodle_io.hpp` discarding the unlinks tensor when
+   `FromKnotEmbedding` returns an invalid PD for a zero-crossing curve —
+   the fix also cured the identical latent symptom in knoodleidentify.
+   Verified through the wrappers: `KnoodleDraw[circle]` draws the circle,
+   `KnoodleSimplify[circle]` gives the unknot complex, and
+   `KnoodleIdentify[circle]` gives `<||>`.
 
-Handed off to the upstream repo:
-`~/Knoodle/handoff/knoodlesimplify-streaming-unknot-empty-output/ROUND-1.md`.
-Original notes follow.
-
-Found 2026-07-03 while testing the thickness fix. A 3D curve that simplifies
-to a bare 0-crossing unknot (e.g. a sampled round circle) makes
-`knoodlesimplify --streaming-mode` emit *nothing at all* — no PD rows, no
-`u` marker — so `knoodledraw` gets empty input, `runGeometry` returns `{}`,
-and `KnoodleDraw` returns `$Failed` (silently; no message). The
-`<|"Unknot"->True|>` marker path works fine when the unknot is a split
-component *alongside* a nontrivial diagram (verified: trefoil + far circle
-renders both). Root cause is upstream in `knoodlesimplify`'s streaming
-output (our `tools/` domain in ~/Knoodle) — fix there, then bump the
-submodule; the WL side may also want a message + graceful unknot render
-instead of a bare `$Failed` when the whole input is trivial.
+Sonnet's response also flags: ASCII-mode `knoodledraw` still deliberately
+draws nothing for a bare unknot summand (design choice upstream, only
+`--format=wl` emits the marker) — irrelevant to the paclet, noted in case
+it ever surprises someone.
 
 ## Documentation build — RESOLVED (2026-07-03)
 

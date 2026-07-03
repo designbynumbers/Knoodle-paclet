@@ -645,9 +645,9 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
 
 (* ---- run knoodleidentify, returning the raw stdout association-text line.
    Unlike knoodlesimplify/knoodledraw, knoodleidentify has no --streaming-mode
-   flag (it reads stdin directly whenever no file argument is given) and no
-   --randomize-projection support, so this is simpler than runSimplifyPdc/
-   runGeometry: just the same File[...]-vs-stdin dispatch, no extra flags. *)
+   flag (it reads stdin directly whenever no file argument is given), so this
+   is simpler than runSimplifyPdc/runGeometry: just the same
+   File[...]-vs-stdin dispatch. *)
 runIdentify[in_, extraFlags_List] := Module[{dataFlag = {"--data-dir=" <> $KnoodleDataDirectory}},
    If[Head[in] === File,
      RunProcess[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags, {First[in]}], "StandardOutput"],
@@ -659,20 +659,27 @@ KnoodleIdentify::link =
   "Input is a link (`1` crossings, multiple components) -- KnoodleIdentify only identifies \
 knots. Use KnoodleSimplify with \"Unite\"->True first if the components should be treated as \
 connect-summed into one knot.";
+KnoodleIdentify::failed =
+  "knoodleidentify produced no result for this input (a degenerate projection or an \
+invalid diagram).";
 (* "MaxCrossings": knoodleidentify's --max-crossings (Automatic = its own
-   default, 13). *)
-Options[KnoodleIdentify] = {"MaxCrossings" -> Automatic};
+   default, 13). "RandomizeProjection": as in KnoodleDraw/KnoodleSimplify --
+   randomly rotate 3D geometry before projecting (the flag reached
+   knoodleidentify upstream 2026-07-03); no-op for explicit diagram input. *)
+Options[KnoodleIdentify] = {"MaxCrossings" -> Automatic, "RandomizeProjection" -> True};
 KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[
-  {norm, tsv, maxFlag, out, result, linkCrossings},
+  {norm, tsv, maxFlag, randFlag, out, result, linkCrossings},
   norm = toTSV[input];
   If[norm === $Failed, Message[KnoodleIdentify::badinput, input]; Return[$Failed]];
   tsv = First[norm];
   maxFlag = Replace[OptionValue["MaxCrossings"],
      {Automatic -> {}, n_Integer?Positive :> {"--max-crossings=" <> ToString[n]}}];
-  out = runIdentify[tsv, maxFlag];
+  randFlag = If[TrueQ[OptionValue["RandomizeProjection"]], {"--randomize-projection"}, {}];
+  out = runIdentify[tsv, Join[maxFlag, randFlag]];
   If[! StringQ[out], Return[$Failed]];
   result = ToExpression[StringTrim[out]];
-  If[Head[result] =!= Association, Return[$Failed]];
+  If[Head[result] =!= Association,
+   Message[KnoodleIdentify::failed]; Return[$Failed]];
   (* headNameQ, not a literal Link[n_] pattern: ToExpression parses
      knoodleidentify's output at *runtime*, in whatever context is active at
      the call site, so the Link it produces is not necessarily
