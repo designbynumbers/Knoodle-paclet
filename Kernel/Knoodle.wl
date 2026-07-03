@@ -108,6 +108,19 @@ $gridSize = 4;
    both sides at any drawing scale. *)
 $strandWidth = 0.5;
 
+(* Orientation arrowhead length as a multiple of the stroke width -- drafting
+   standards (ASME Y14.2) size heads proportionally to line weight and solid-
+   filled, so ~3.5x the stroke reads as a matched, deliberate head. *)
+$arrowLengthFactor = 3.5;
+
+(* Solid swept-back arrowhead for orientation arrows: tip at the origin, unit
+   length, 0.72 wide with a shallow tail notch. Wider than the front-end's
+   default head so its wings clearly clear a thick stroke, and drawn with no
+   color directive of its own so it inherits each strand's color (verified:
+   an undirected Polygon in an Arrowheads graphic picks up the ambient
+   stroke color). *)
+$arrowShape = Graphics[Polygon[{{-1, 0.36}, {0, 0}, {-1, -0.36}, {-0.75, 0}}]];
+
 (* ---- context-free head test (KnotTheory symbols live in various contexts) ---- *)
 headNameQ[x_, name_String] := MatchQ[Head[x], _Symbol] && SymbolName[Head[x]] === name;
 
@@ -401,19 +414,52 @@ faceFill[colorSign_] := If[colorSign > 0,
   {Opacity[0.14], ThemeColor["Accent1"]},
   {Opacity[0.045], ThemeColor["Foreground"]}];
 
+(* ---- orientation arrowheads ----
+   Arc polylines are emitted by knoodledraw in orientation order (verified:
+   per-arc arrows circulate consistently around each component), so an Arrow
+   over the same points shows the knot's orientation directly.
+
+   Anchor parameter (0..1, by arc length) for the arrowhead on polyline pts:
+   the midpoint of the longest single segment -- always the middle of a
+   straight run, never a rounded-corner chord (where the head's direction
+   would be ambiguous) and never an arc endpoint (so it cannot sit in, or
+   visually close, the under-strand break at a crossing). When arc labels are
+   shown they anchor at the midpoint of the longest horizontal segment
+   (arcLabelSpec), which is typically this same spot -- so segFrac drops from
+   1/2 to 0.3 to slide the head off the label's anchor. *)
+arrowParameter[pts_, segFrac_] := Module[{seglens = Norm /@ Differences[pts], cum, i},
+  cum = Accumulate[seglens];
+  i = First[Ordering[seglens, -1]];
+  (cum[[i]] - (1 - segFrac) seglens[[i]])/Last[cum]];
+
+(* Which arc Ids get an arrowhead: every arc for All; for True, one per link
+   component -- its longest arc, where the head is most at home (knot-theory
+   convention: orientation propagates, one arrow per component suffices). *)
+arcLength[arc_] := Total[Norm /@ Differences[N@arc["Points"]]];
+arrowArcIds[arcs_, All] := arcs[[All, "Id"]];
+arrowArcIds[arcs_, True] :=
+  Values[GroupBy[arcs, #["Component"] &, First[MaximalBy[#, arcLength]]["Id"] &]];
+arrowArcIds[_, _] := {};
+
 (* ---- render one summand's geometry association as a primitive list ----
    compOffset shifts this summand's arc "Component" indices, so every summand in
    a multi-summand picture (connect-sum factors / split components -- see
    toTSV's multi-summand pattern) draws in its own run of ColorData[97] colors
    instead of each restarting at color 1. radiusFrac is the corner radius as a
    fraction of one grid square, in [0,1/2] (0 = sharp corners). checkerboardQ
-   shades faces; labelSet is a subset of {"Crossings","Arcs","Faces"}. *)
-summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelSet_, compOffset_] := Module[
-  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, style = labelStyle[], interiorFaces, interiorPolys, w, h},
+   shades faces; labelSet is a subset of {"Crossings","Arcs","Faces"}. orient
+   is the "Orientation" option (False/True/All); arrowFrac the arrowhead length
+   as a fraction of the full graphic width (computed scale-aware in render). *)
+summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelSet_, compOffset_,
+  orient_, arrowFrac_] := Module[
+  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, style = labelStyle[], interiorFaces, interiorPolys,
+   w, h, arrowIds, segFrac},
 
   interiorFaces = If[KeyExistsQ[assoc, "Faces"], Select[assoc["Faces"], !TrueQ[#["Exterior"]] &], {}];
   interiorPolys = interiorFaces[[All, "Boundary"]];
   {w, h} = assoc["BoundingBox"];
+  arrowIds = arrowArcIds[assoc["Arcs"], orient];
+  segFrac = If[MemberQ[labelSet, "Arcs"], 0.3, 0.5];
 
   {
    (* faceFill[...] returns a *list* of directives ({Opacity[...], color}); it must be
@@ -427,8 +473,11 @@ summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelS
     {}],
 
    {CapForm["Round"], JoinForm["Round"], thick,
-    Table[{ColorData[97][arc["Component"] + compOffset + 1],
-       Line[If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]]},
+    Table[With[{pts = If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]},
+       {ColorData[97][arc["Component"] + compOffset + 1],
+        If[MemberQ[arrowIds, arc["Id"]] && Length[pts] >= 2,
+         {Arrowheads[{{arrowFrac, arrowParameter[pts, segFrac], $arrowShape}}], Arrow[pts]},
+         Line[pts]]}],
       {arc, assoc["Arcs"]}]},
 
    If[MemberQ[labelSet, "Crossings"] && KeyExistsQ[assoc, "Crossings"],
@@ -445,7 +494,8 @@ summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelS
 
 (* A bare "<|"Unknot"->True|>" marker (knoodledraw's stand-in for a 0-crossing
    summand -- see the C++-side comment on DrawKnot) draws as a simple loop, in
-   the same strand style, occupying one grid square. *)
+   the same strand style, occupying one grid square. No orientation arrowhead:
+   the marker carries no arc data, so there is no orientation to show. *)
 unknotPrimitives[thick_, compOffset_] := {CapForm["Round"], JoinForm["Round"], thick,
    ColorData[97][compOffset + 1], Circle[$gridSize {1/2, 1/2}, $gridSize/2]};
 
@@ -459,11 +509,13 @@ geoComponentCount[assoc_] := If[KeyExistsQ[assoc, "Unknot"], 1,
    arithmetic needed) -- and each claiming its own run of component colors, so
    two unrelated summands never accidentally share "Component 0"'s color. *)
 $summandGap = 2;
-layoutGeos[geos_List, thick_, radiusFrac_, checkerboardQ_, labelSet_] := Module[{x = 0, c = 0, prims, w, nc, dx},
+layoutGeos[geos_List, thick_, radiusFrac_, checkerboardQ_, labelSet_, orient_, arrowFrac_] :=
+ Module[{x = 0, c = 0, prims, w, nc, dx},
   Table[
    {prims, w, nc} = If[KeyExistsQ[geo, "Unknot"],
       {unknotPrimitives[thick, c], $gridSize, 1},
-      {summandPrimitives[geo, thick, radiusFrac, checkerboardQ, labelSet, c], geoWidth[geo], geoComponentCount[geo]}];
+      {summandPrimitives[geo, thick, radiusFrac, checkerboardQ, labelSet, c, orient, arrowFrac],
+       geoWidth[geo], geoComponentCount[geo]}];
    dx = x; x += w + $summandGap $gridSize; c += nc;
    Translate[prims, {dx, 0}],
    {geo, geos}]
@@ -496,13 +548,24 @@ resolveThickness[Automatic, geos_, img_] :=
 resolveThickness[t_?NumericQ, _, _] := AbsoluteThickness[t];
 resolveThickness[t_, _, _] := t;
 
+(* Orientation arrowhead length as an Arrowheads fraction of the graphic width:
+   $arrowLengthFactor times the resolved stroke width, so heads track the
+   scale-aware thickness exactly (proportional on dense diagrams, capped with
+   the 7 pt stroke cap on small ones). For a non-AbsoluteThickness "Thickness"
+   directive there is no pt width to scale from; fall back to the same
+   proportional size Automatic thickness would give. *)
+arrowFraction[AbsoluteThickness[p_], _, img_] := $arrowLengthFactor p/imageWidthPt[img];
+arrowFraction[_, geos_, _] := $arrowLengthFactor $strandWidth/layoutWidth[geos];
+
 (* legendQ draws a LineLegend matching each component's strand color to its
    (global, 0-based) component number -- the same numbering layoutGeos assigns
    colors by, running across every summand, not restarting per summand. *)
-render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_, legendQ_] := Module[
-  {g = Graphics[
-     layoutGeos[geos, resolveThickness[thick, geos, img], radiusFrac, checkerboardQ, labelSet],
-     AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[$rangePad]], n},
+render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_, legendQ_, orient_] := Module[
+  {thickD = resolveThickness[thick, geos, img], g, n},
+  g = Graphics[
+     layoutGeos[geos, thickD, radiusFrac, checkerboardQ, labelSet, orient,
+      arrowFraction[thickD, geos, img]],
+     AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[$rangePad]];
   If[TrueQ[legendQ],
    n = totalComponentCount[geos];
    Legended[g, LineLegend[ColorData[97] /@ Range[n], Range[0, n - 1]]],
@@ -528,10 +591,17 @@ KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
    "Thickness": Automatic (default) scales the strand width with the diagram so
    crossing gaps stay visible on dense diagrams (see resolveThickness); a number
    is a fixed AbsoluteThickness in printer's points; any other directive is
-   used as-is. *)
+   used as-is.
+   "Orientation": False (default) draws unoriented strands; True marks the
+   knot's orientation with one arrowhead per link component (on the
+   component's longest arc); All puts an arrowhead on every arc. Heads sit at
+   the middle of an arc's longest straight run (never at a crossing gap or on
+   a rounded corner) and are sized to the stroke weight; unknot-marker
+   summands carry no arc data, so they draw without an arrowhead. *)
 Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {},
    "Checkerboard" -> False, "Labels" -> {}, "ExteriorFace" -> Automatic, PlotLegends -> None,
-   "RandomizeProjection" -> True, ImageSize -> 340, "Thickness" -> Automatic};
+   "RandomizeProjection" -> True, ImageSize -> 340, "Thickness" -> Automatic,
+   "Orientation" -> False};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet, extFlag},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
@@ -544,7 +614,8 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
   If[geos === {}, Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
   render[geos, OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"],
-    OptionValue["Checkerboard"], labelSet, OptionValue[PlotLegends] =!= None]
+    OptionValue["Checkerboard"], labelSet, OptionValue[PlotLegends] =!= None,
+    OptionValue["Orientation"]]
 ];
 
 KnoodleSimplify::badinput = "`1` is not a recognized knot/link input.";
