@@ -1,0 +1,100 @@
+name: release-build
+
+# Compile the three Knoodle CLI tools from a *published Knoodle release tarball*
+# (the vendored source+data archive attached to a HenrikSchumacher/Knoodle
+# release), for the paclet release pipeline driven by ci/release.sh.
+#
+# Deliberately distinct from build.yml: build.yml compiles from the submodule
+# pin on every push to main (dev validation, possibly ahead of any release);
+# this workflow compiles from the release tarball, so a released paclet's
+# binaries are provably buildable from -- and depend only on -- the public
+# artifact (same source the Homebrew tap builds from). No submodule, no LFS.
+
+on:
+  workflow_dispatch:
+    inputs:
+      knoodle_version:
+        description: "Knoodle release tag to build from (e.g. v1.0.3)"
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x86_64
+            runs-on: windows-latest
+            systemid: Windows-x86-64
+          - name: macos-arm64
+            runs-on: macos-26
+            systemid: MacOSX-ARM64
+          - name: linux-x86_64
+            runs-on: ubuntu-latest
+            systemid: Linux-x86-64
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout paclet (for ci/build-tools.sh only)
+        uses: actions/checkout@v4
+        # No submodules: we build from the release tarball, not the clone.
+
+      - name: Download + extract the Knoodle release tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${{ inputs.knoodle_version }}"; VNO="${VER#v}"
+          TB="knoodle-${VNO}-vendored.tar.gz"
+          echo "Fetching $TB from HenrikSchumacher/Knoodle@$VER"
+          gh release download "$VER" --repo HenrikSchumacher/Knoodle --pattern "$TB"
+          tar xzf "$TB"
+          echo "KND=$PWD/knoodle-${VNO}-vendored" >> "$GITHUB_ENV"
+          echo "KND_BASE=knoodle-${VNO}-vendored"  >> "$GITHUB_ENV"
+
+      - name: Set up clang (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if command -v clang++ >/dev/null 2>&1; then echo "clang++ already on PATH";
+          elif [ -x "/c/Program Files/LLVM/bin/clang++.exe" ]; then echo "/c/Program Files/LLVM/bin" >> "$GITHUB_PATH";
+          else choco install llvm -y; echo "/c/Program Files/LLVM/bin" >> "$GITHUB_PATH"; fi
+
+      - name: Build (host clang — Windows / macOS)
+        if: runner.os != 'Linux'
+        env:
+          OPT: "-O2"
+        run: |
+          clang++ --version | head -2
+          bash ci/build-tools.sh          # KND comes from $GITHUB_ENV
+
+      - name: Build (AlmaLinux 8 container — glibc 2.28 baseline, static libstdc++)
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -v "$PWD":/work -w /work almalinux:8 bash -exc '
+            dnf install -y gcc-toolset-13 clang > /dev/null
+            source /opt/rh/gcc-toolset-13/enable
+            export CXX=clang++ OPT="-O2" KND="/work/'"$KND_BASE"'"
+            export EXTRA="--gcc-toolchain=/opt/rh/gcc-toolset-13/root/usr -static-libstdc++ -static-libgcc -DTOOLS_NO_RESTRICT"
+            clang++ --version | head -2
+            bash ci/build-tools.sh
+          '
+          echo "--- max GLIBC symbol version (want <= 2.28) ---"
+          objdump -T build/knoodlesimplify | grep -oE "GLIBC_[0-9.]+" | sort -V | tail -1 || true
+
+      - name: Smoke test (each binary runs)
+        run: |
+          for f in build/*; do
+            [ -f "$f" ] || continue
+            echo "=== $f --help ==="; "$f" --help || true
+          done
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: knoodle-tools-${{ matrix.systemid }}
+          path: build/*
+          if-no-files-found: error

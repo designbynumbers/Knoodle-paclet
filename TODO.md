@@ -1,6 +1,65 @@
 # Knoodle-paclet TODO
 
-## Documentation Center reference pages (last remaining item)
+## Bug: KnoodleDraw/KnoodleSimplify of a plain unknot returns $Failed
+
+Found 2026-07-03 while testing the thickness fix. A 3D curve that simplifies
+to a bare 0-crossing unknot (e.g. a sampled round circle) makes
+`knoodlesimplify --streaming-mode` emit *nothing at all* — no PD rows, no
+`u` marker — so `knoodledraw` gets empty input, `runGeometry` returns `{}`,
+and `KnoodleDraw` returns `$Failed` (silently; no message). The
+`<|"Unknot"->True|>` marker path works fine when the unknot is a split
+component *alongside* a nontrivial diagram (verified: trefoil + far circle
+renders both). Root cause is upstream in `knoodlesimplify`'s streaming
+output (our `tools/` domain in ~/Knoodle) — fix there, then bump the
+submodule; the WL side may also want a message + graceful unknot render
+instead of a bare `$Failed` when the whole input is trivial.
+
+## Documentation build — RESOLVED (2026-07-03)
+
+The `PacletDocumentationBuild` mystery below is solved. Key facts, verified
+against MaTeX 1.7.10 (installed from the Paclet Repository, i.e. its *shipped*
+built form) on this machine:
+
+- Doc notebooks exist in **two forms**: *source/authoring* (visible
+  `CategorizationSection` cells, no stylesheet) and *built/in-product*
+  (Categorization folded into `TaggingRules -> {"Metadata" -> {...}}`, Wolfram
+  `Reference.nb`/`Guide` stylesheet, plus generated `SearchIndex/`,
+  `SpellIndex/`, `Index/`). `PacletDocumentationBuild[dir]` transforms the
+  former into the latter under `build/Knoodle/Documentation/`.
+- The build was **already working** for the 3 reference pages; the earlier
+  `SuccessfulFilesCount -> 0` was incremental-rebuild noise. The *only* real
+  failure was the **Guide page**: it lacked a `Categorization` section, so the
+  builder threw `"Entity Type" value not found` and produced no built guide.
+- **Fix applied** to `Documentation/English/Guides/Knoodle.nb`:
+  1. Added a `Categorization` group (`Entity Type -> "Guide"`,
+     `Paclet Name -> "Knoodle"`, `Context -> "Knoodle`"`,
+     `URI -> "Knoodle/guide/Knoodle"`).
+  2. Switched the body to real guide styles (`GuideTitle`, `GuideAbstract`,
+     `GuideReferenceSection`, `GuideText`) with clickable
+     `paclet:Knoodle/ref/*` links for the three documented functions. (This
+     also cleared a `GetNotebookTitle::notitle` warning — the title must be a
+     `GuideTitle`/`GuideTOCTitle` cell.)
+- Result: a clean `PacletDocumentationBuild` → `SuccessfulFilesCount -> 4`,
+  `FailedFilesCount -> 0`, no `notitle` warning. All 4 built notebooks have
+  Categorization stripped + the Wolfram stylesheet; full tree
+  (Guide + 3 Symbols + Index/SearchIndex/SpellIndex) matches MaTeX's shipped
+  layout. (Two residual messages — `Options::optnf` for `TaggingRules` and
+  `MIMETypeToFormatList::fmterr` — are benign DocumentationBuild internals;
+  they fail no file.)
+
+**Remaining doc work (the actual distribution bug — was item (b)):** the
+paclet's `Documentation` extension still ships the **source authoring**
+`Documentation/` folder, so an *installed* user sees raw Categorization and
+gets no search index. The `.paclet` must ship the **built**
+`build/Knoodle/Documentation/` instead. Wire `PacletDocumentationBuild` +
+`PacletBuild` (or the `WolframResearch/PacletCICD` `build-paclet` action) into
+CI so releases package the built docs. Also: the hand-edited source guide's
+internal cache (`NotebookDataLength`, byte offsets, trailing
+`NotebookFileOutline`) is now stale — harmless (the front end recomputes on
+open/save; the builder reads the real `Notebook[...]` expression), but open +
+save it once in the FE if a clean source diff is wanted.
+
+## Documentation Center reference pages (historical notes)
 
 **Status**: skeletal but working. Reference pages exist for `KnoodleDraw`,
 `KnoodleSimplify`, `KnoodleIdentify`

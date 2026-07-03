@@ -16,8 +16,13 @@ desktop.ini
 *.swp
 *~
 
+# Log files the Knoodle CLI tools drop in the working directory
+knoodlesimplify.log
+knoodledraw.log
+
 # --- Build output / bundled artifacts (produced by CI, not committed) ---
 build/
+build-local/
 dist/
 staging/
 *.paclet

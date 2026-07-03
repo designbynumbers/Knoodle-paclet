@@ -67,13 +67,46 @@ $KnoodleBinaryDirectory::usage =
 
 Begin["`Private`"];
 
-(* ---- binary locations (development default; overridden when packaged) ---- *)
-$KnoodleBinaryDirectory = "/Users/jasoncantarella/Knoodle/tools";
-exe[name_String] := FileNameJoin[{$KnoodleBinaryDirectory, name}];
+(* ---- binary + data locations --------------------------------------------
+   The CLI executables (per SystemID) and the KLUT lookup tables
+   (Klut_Keys_NN.bin / Klut_Values_NN.tsv) are declared as "Asset" extensions
+   in PacletInfo.wl and located by name via AssetLocation -- no hard-coded
+   paths, with the right per-platform binary selected automatically. When this
+   package is loaded straight from the source checkout (where those assets
+   resolve to files that don't exist yet), each lookup falls back to the
+   sibling Knoodle repo's build tree, so ordinary development keeps working. *)
+$knoodlePaclet := PacletObject["Knoodle"];
+
+(* AssetLocation for `name`, or `fallback` if unresolved/absent (dev checkout). *)
+assetOr[name_String, fallback_String] :=
+  With[{loc = Quiet @ $knoodlePaclet["AssetLocation", name]},
+    If[StringQ[loc] && (FileExistsQ[loc] || DirectoryQ[loc]), loc, fallback]];
+
+(* The Windows Asset maps "knoodledraw" -> "knoodledraw.exe", so callers always
+   ask for the bare tool name and get the right file for this platform. *)
+exe[name_String] := assetOr[name, FileNameJoin[{"/Users/jasoncantarella/Knoodle/tools", name}]];
+
+$KnoodleDataDirectory := assetOr["KlutData", "/Users/jasoncantarella/Knoodle/data/Klut"];
+
+$KnoodleBinaryDirectory := DirectoryName[exe["knoodledraw"]];
+
+(* Paclet archives (zip) don't reliably preserve the executable bit, so restore
+   it once, at load time, for the bundled binaries. No-op on Windows; harmless
+   on a dev checkout (already +x). Failures are ignored so a read-only install
+   location can't break loading. *)
+If[$OperatingSystem =!= "Windows",
+  Quiet @ Run["chmod +x " <> StringRiffle[
+     ("\"" <> exe[#] <> "\"") & /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify"}, " "]]];
 
 (* Square grid spacing requested from knoodledraw (see runGeometry). One grid
    square is this many coordinate units; the corner radius is a fraction of it. *)
 $gridSize = 4;
+
+(* Strand width used by "Thickness" -> Automatic, in the same coordinate units.
+   knoodledraw insets each under-strand endpoint by 1 unit, so the visible break
+   at a crossing is 2 units wide; half a unit of stroke leaves clear daylight on
+   both sides at any drawing scale. *)
+$strandWidth = 0.5;
 
 (* ---- context-free head test (KnotTheory symbols live in various contexts) ---- *)
 headNameQ[x_, name_String] := MatchQ[Head[x], _Symbol] && SymbolName[Head[x]] === name;
@@ -393,7 +426,7 @@ summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelS
       {face, interiorFaces}],
     {}],
 
-   {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
+   {CapForm["Round"], JoinForm["Round"], thick,
     Table[{ColorData[97][arc["Component"] + compOffset + 1],
        Line[If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]]},
       {arc, assoc["Arcs"]}]},
@@ -413,7 +446,7 @@ summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelS
 (* A bare "<|"Unknot"->True|>" marker (knoodledraw's stand-in for a 0-crossing
    summand -- see the C++-side comment on DrawKnot) draws as a simple loop, in
    the same strand style, occupying one grid square. *)
-unknotPrimitives[thick_, compOffset_] := {CapForm["Round"], JoinForm["Round"], AbsoluteThickness[thick],
+unknotPrimitives[thick_, compOffset_] := {CapForm["Round"], JoinForm["Round"], thick,
    ColorData[97][compOffset + 1], Circle[$gridSize {1/2, 1/2}, $gridSize/2]};
 
 geoWidth[assoc_] := If[KeyExistsQ[assoc, "Unknot"], $gridSize, First[assoc["BoundingBox"]] $gridSize];
@@ -438,12 +471,38 @@ layoutGeos[geos_List, thick_, radiusFrac_, checkerboardQ_, labelSet_] := Module[
 
 totalComponentCount[geos_List] := Total[If[KeyExistsQ[#, "Unknot"], 1, geoComponentCount[#]] & /@ geos];
 
+(* Full rendered width in coordinate units: the summands side by side plus the
+   inter-summand gaps (mirroring layoutGeos's accumulation), plus the
+   PlotRangePadding fraction on each side. *)
+$rangePad = 0.07;
+layoutWidth[geos_List] :=
+  (Total[geoWidth /@ geos] + $summandGap $gridSize (Length[geos] - 1)) (1 + 2 $rangePad);
+
+(* "Thickness" -> Automatic draws strands $strandWidth coordinate units wide, so
+   the stroke scales with the diagram and the baked-in under-strand breaks stay
+   visible no matter how many grid squares are squeezed into the image -- but
+   never thicker than 7 pt, which keeps small diagrams looking exactly as they
+   did when 7 pt was the fixed default. The cap is computed against the
+   requested ImageSize width (its default, 340, doubles as the fallback for
+   non-numeric ImageSize specs). An explicit number keeps the old fixed
+   behavior: that many printer's points regardless of scale. Anything else is
+   passed through as a Graphics directive (e.g. Thickness[0.02]). *)
+imageWidthPt[img_] := Which[
+   NumericQ[img], img,
+   MatchQ[img, {_?NumericQ, _}], First[img],
+   True, 340.];
+resolveThickness[Automatic, geos_, img_] :=
+  AbsoluteThickness[Min[7., $strandWidth imageWidthPt[img]/layoutWidth[geos]]];
+resolveThickness[t_?NumericQ, _, _] := AbsoluteThickness[t];
+resolveThickness[t_, _, _] := t;
+
 (* legendQ draws a LineLegend matching each component's strand color to its
    (global, 0-based) component number -- the same numbering layoutGeos assigns
    colors by, running across every summand, not restarting per summand. *)
 render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_, legendQ_] := Module[
-  {g = Graphics[layoutGeos[geos, thick, radiusFrac, checkerboardQ, labelSet],
-     AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[0.07]], n},
+  {g = Graphics[
+     layoutGeos[geos, resolveThickness[thick, geos, img], radiusFrac, checkerboardQ, labelSet],
+     AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[$rangePad]], n},
   If[TrueQ[legendQ],
    n = totalComponentCount[geos];
    Legended[g, LineLegend[ColorData[97] /@ Range[n], Range[0, n - 1]]],
@@ -465,10 +524,14 @@ KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
    down the z axis, which can degenerate on vertical/coplanar segments,
    so this defaults on; set to False to get the plain z-axis projection
    (e.g. for reproducibility). Only meaningful for 3D input read from stdin
-   (KnotData/space-curve/point-list inputs); a no-op otherwise. *)
+   (KnotData/space-curve/point-list inputs); a no-op otherwise.
+   "Thickness": Automatic (default) scales the strand width with the diagram so
+   crossing gaps stay visible on dense diagrams (see resolveThickness); a number
+   is a fixed AbsoluteThickness in printer's points; any other directive is
+   used as-is. *)
 Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {},
    "Checkerboard" -> False, "Labels" -> {}, "ExteriorFace" -> Automatic, PlotLegends -> None,
-   "RandomizeProjection" -> True, ImageSize -> 340, "Thickness" -> 7};
+   "RandomizeProjection" -> True, ImageSize -> 340, "Thickness" -> Automatic};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet, extFlag},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
@@ -514,9 +577,10 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
    flag (it reads stdin directly whenever no file argument is given) and no
    --randomize-projection support, so this is simpler than runSimplifyPdc/
    runGeometry: just the same File[...]-vs-stdin dispatch, no extra flags. *)
-runIdentify[in_, extraFlags_List] := If[Head[in] === File,
-   RunProcess[Join[{exe["knoodleidentify"]}, extraFlags, {First[in]}], "StandardOutput"],
-   RunProcess[Join[{exe["knoodleidentify"]}, extraFlags], "StandardOutput", in]
+runIdentify[in_, extraFlags_List] := Module[{dataFlag = {"--data-dir=" <> $KnoodleDataDirectory}},
+   If[Head[in] === File,
+     RunProcess[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags, {First[in]}], "StandardOutput"],
+     RunProcess[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags], "StandardOutput", in]]
 ];
 
 KnoodleIdentify::badinput = "`1` is not a recognized knot/link input.";
