@@ -574,6 +574,9 @@ render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_, legendQ_
 
 (* ---- public entry point ---- *)
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
+KnoodleDraw::failed =
+  "knoodledraw produced no geometry for this input (degenerate or self-intersecting \
+geometry, or an invalid diagram).";
 (* "CornerRadius": corner arc radius as a fraction of one grid square, in [0, 1/2]
    (0 = sharp corners). "Checkerboard": shade the two-colorable faces. "Labels": a
    subset of {"Crossings","Arcs","Faces"} (a single string is also accepted).
@@ -611,7 +614,7 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
      {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}];
   geos = runGeometry[tsv, simp, Join[toCliFlags[OptionValue["LayoutOptions"]], extFlag],
     TrueQ[OptionValue["RandomizeProjection"]]];
-  If[geos === {}, Return[$Failed]];
+  If[geos === {}, Message[KnoodleDraw::failed]; Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
   render[geos, OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"],
     OptionValue["Checkerboard"], labelSet, OptionValue[PlotLegends] =!= None,
@@ -619,6 +622,9 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
 ];
 
 KnoodleSimplify::badinput = "`1` is not a recognized knot/link input.";
+KnoodleSimplify::failed =
+  "knoodlesimplify produced no result for this input (degenerate or self-intersecting \
+geometry, or an invalid diagram).";
 (* "SimplifyLevel": knoodlesimplify's --simplify-level (Automatic = its own
    default). "RandomizeProjection": as in KnoodleDraw, applies only to 3D
    input read from stdin. "Unite": False (default) is knoodlesimplify's own
@@ -639,7 +645,11 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
   uniteFlag = If[TrueQ[OptionValue["Unite"]], {"--unite"}, {}];
   extraFlags = toCliFlags[OptionValue["SimplifyOptions"]];
   serialized = runSimplifyPdc[tsv, Join[levelFlag, randFlag, uniteFlag, extraFlags]];
-  If[! StringQ[serialized], Return[$Failed]];
+  (* Empty output means the tool bailed (degenerate/self-intersecting
+     geometry, invalid diagram): say so rather than returning a quietly
+     empty complex. A genuine unknot is NOT empty ("u <color>" line). *)
+  If[! StringQ[serialized] || StringTrim[serialized] === "",
+   Message[KnoodleSimplify::failed]; Return[$Failed]];
   PlanarDiagramComplex[<|"serialized" -> serialized|>]
 ];
 

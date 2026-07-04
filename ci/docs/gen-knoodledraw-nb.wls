@@ -18,7 +18,7 @@ $png = 0;
 inCell[h_HoldForm] := Cell[BoxData[ToBoxes[h]], "Input"];
 (* Evaluate, snapshot a review PNG when graphical, return an Input+Output group. *)
 group[h_HoldForm] := Module[{res = ReleaseHold[h]},
-  If[! FreeQ[res, _Graphics],
+  If[! FreeQ[res, _Graphics | _Graphics3D],
    $png++;
    Export[FileNameJoin[{$review, "ex" <> ToString[$png] <> ".png"}], res, ImageResolution -> 100]];
   Cell[CellGroupData[{inCell[h], Cell[BoxData[ToBoxes[res]], "Output"]}, Open]]];
@@ -161,12 +161,19 @@ over/under gaps at every crossing visible even on dense diagrams. Here a \
 
 ex8 = {
    delim,
-   text["Draw a Hopf link from its two component curves, with a legend \
-matching each component's color to its component number:"],
+   text["A list of point lists is a multi-component link, one closed 3D \
+curve per component. Two circles in orthogonal planes form a Hopf link:"],
    silent[HoldForm[
      c1 = Most@Table[N@{Cos[t], Sin[t], 0}, {t, 0., 2 Pi, 2 Pi/60}];]],
    silent[HoldForm[
      c2 = Most@Table[N@{1 + Cos[t], 0, Sin[t]}, {t, 0., 2 Pi, 2 Pi/60}];]],
+   group[HoldForm[Graphics3D[{CapForm["Round"],
+       ColorData[97][1], Tube[Append[c1, First[c1]], 0.05],
+       ColorData[97][2], Tube[Append[c2, First[c2]], 0.05]},
+      Boxed -> False, ImageSize -> 200]]],
+   text["KnoodleDraw projects the 3D geometry to a link diagram; a legend \
+matches each component's color (the same colors as above) to its component \
+number:"],
    (SeedRandom[5]; group[HoldForm[KnoodleDraw[{c1, c2}, PlotLegends -> Automatic,
        ImageSize -> 250]]])};
 

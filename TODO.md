@@ -1,5 +1,15 @@
 # Knoodle-paclet TODO
 
+## Upstream (handed off): knoodlesimplify segfaults on a malformed .kndlxyz
+
+Found 2026-07-03 while building the link doc example: a `.kndlxyz` file that
+fails to parse logs `ReadFromFile: Reading file failed` and then dies with
+exit 139 (SIGSEGV) instead of a clean error exit — something dereferences
+the returned invalid LinkEmbedding. Handed off:
+`~/Knoodle/handoff/knoodlesimplify-kndlxyz-readfail-segfault/ROUND-1.md`.
+No paclet follow-up needed once fixed (the WL wrappers now message on
+empty/failed tool output).
+
 ## KLUT 14-16-crossing NotFound quirk — NO ACTION (decision 2026-07-03)
 
 Found while writing the KnoodleIdentify reference page:

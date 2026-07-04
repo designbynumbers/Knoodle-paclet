@@ -98,6 +98,19 @@ single 51-crossing diagram of the same knot:"],
    text["KnoodleIdentify accepts the complex directly and names the factors:"],
    group[HoldForm[KnoodleIdentify[split]]]};
 
+exLink = {
+   delim,
+   text["A list of point lists is a multi-component link, one closed 3D \
+curve per component. Superimpose two Gaussian random 20-gons, the second \
+nudged half a unit sideways (each polygon's steps sum to zero, so its last \
+vertex is exactly the origin -- unshifted copies would touch there). With \
+this seed the two polygons happen to link:"],
+   silent[HoldForm[SeedRandom[3]; L1 = GaussianRandomPolygon[20];]],
+   silent[HoldForm[L2 = (# + {1/2, 0, 0}) & /@ GaussianRandomPolygon[20];]],
+   group[HoldForm[hopf = KnoodleSimplify[{L1, L2}]]],
+   text["Drawing the complex shows the two polygons form a Hopf link:"],
+   group[HoldForm[KnoodleDraw[hopf, PlotLegends -> Automatic, ImageSize -> 200]]]};
+
 ex3 = {
    delim,
    text["A rogue's gallery: the 21 hard unknot diagrams catalogued by \
@@ -164,7 +177,7 @@ examplesSection = Cell[CellGroupData[Flatten[{
            "PrimaryExamplesSection"], ""}}], $Line = 0; Null]],
      "PrimaryExamplesSection"],
     silent[HoldForm[Needs["Knoodle`"]]],
-    ex1, pdExplainerCells, ex2, ex3, ex4, ex5}], Open]];
+    ex1, pdExplainerCells, ex2, exLink, ex3, ex4, ex5}], Open]];
 
 nb = Notebook[{categorization, usageSection, examplesSection},
    StyleDefinitions -> FrontEnd`FileName[{"Wolfram"},
