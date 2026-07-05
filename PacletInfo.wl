@@ -1,6 +1,6 @@
 PacletObject[<|
   "Name" -> "Knoodle",
-  "Version" -> "0.0.1",
+  "Version" -> "0.9.0",
   "WolframVersion" -> "13.0+",
   "Description" -> "Knot and link diagram drawing, simplification, and identification, powered by the Knoodle CLI tools.",
   "Creator" -> "Jason Cantarella",
@@ -35,6 +35,7 @@ PacletObject[<|
     {"Asset", "Root" -> "Resources", "Assets" -> {
       {"KlutData", "Klut"},
       {"HardUnknots", "ExampleData/HardUnknots"},
-      {"VeryHardUnknots", "ExampleData/VeryHardUnknots"}}}
+      {"VeryHardUnknots", "ExampleData/VeryHardUnknots"},
+      {"DrawPDGallery", "ExampleData/DrawPDGallery"}}}
   }
 |>]

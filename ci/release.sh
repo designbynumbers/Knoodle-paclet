@@ -69,6 +69,16 @@ echo "   paclet version: $PVER   (release tag: $PACLET_TAG)"
 if gh release view "$PACLET_TAG" --repo "$PACLET_REPO" >/dev/null 2>&1; then
   echo "ABORT: paclet release $PACLET_TAG already exists on $PACLET_REPO."; exit 1; fi
 
+# 5. The guide page's version sentence ("This version of the Knoodle paclet
+#    (X) packages version (Y) of the Knoodle library") must match what this
+#    release actually ships. Checked as two substrings because the front end
+#    may rewrap the notebook's line breaks.
+GUIDE="$REPO/Documentation/English/Guides/Knoodle.nb"
+if ! grep -q "($PVER)" "$GUIDE" || ! grep -q "($KVER_NO_V)" "$GUIDE"; then
+  echo "ABORT: guide version sentence is stale -- it must mention paclet ($PVER)"
+  echo "       and Knoodle ($KVER_NO_V). Update $GUIDE and commit."; exit 1; fi
+echo "   guide version sentence: paclet $PVER / Knoodle $KVER_NO_V"
+
 # --------------------------------------------- CI: binaries from the tarball
 echo "== dispatching $WORKFLOW to compile binaries from $TARBALL =="
 gh workflow run "$WORKFLOW" --repo "$PACLET_REPO" -f knoodle_version="$KVER"
