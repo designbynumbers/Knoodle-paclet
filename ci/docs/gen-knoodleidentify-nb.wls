@@ -13,7 +13,14 @@ $out    = FileNameJoin[{$repo, "Documentation", "English", "ReferencePages", "Sy
 $review = FileNameJoin[{$TemporaryDirectory, "knoodle-doc-review"}]; Quiet[CreateDirectory[$review]];
 
 $png = 0;
-inCell[h_HoldForm] := Cell[BoxData[ToBoxes[h]], "Input"];
+(* Input cells: built from the code's InputForm string through the front
+   end's own parser -- exactly the boxes typing would produce, so the cell
+   re-evaluates like ordinary user input. The old ToBoxes[HoldForm[...]]
+   made doc inputs display-only no-ops and applied output formatting to
+   unevaluated input (see gen-knoodledraw-nb.wls for the full story). *)
+heldInputForm[HoldForm[e_]] := ToString[Unevaluated[e], InputForm];
+inCell[h_HoldForm] := Cell[BoxData[First @ First @ UsingFrontEnd @ MathLink`CallFrontEnd[
+      FrontEnd`UndocumentedTestFEParserPacket[heldInputForm[h], False]]], "Input"];
 group[h_HoldForm] := Module[{res = ReleaseHold[h]},
   Cell[CellGroupData[{inCell[h], Cell[BoxData[ToBoxes[res]], "Output"]}, Open]]];
 silent[h_HoldForm] := (ReleaseHold[h]; inCell[h]);

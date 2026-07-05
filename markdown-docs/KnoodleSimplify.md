@@ -106,10 +106,11 @@ Not observed in practice yet, just a known structural risk.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `"SimplifyLevel"` | `Automatic` | Maps to `knoodlesimplify`'s `--simplify-level`. `Automatic` = the tool's own default (full Reapr pipeline, level 6). Valid integer levels: `0` (no simplification, PD code passthrough only), `3` (Reidemeister I+II), `4` (+path rerouting), `5` (+summand/connect-sum detection), `6`+ (full Reapr: randomized 3D embedding + compaction). |
+| `"SimplifyLevel"` | `Automatic` | Maps to `knoodlesimplify`'s `--simplify-level`. `Automatic` = the tool's own default (full Reapr pipeline, level 6). The scale (rewired upstream at Knoodle `34ba537`, 2026-07-04 — levels 1–3 were silent no-ops before; see `~/Knoodle/handoff/knoodlesimplify-simplify-levels-rewired/`): `0` no simplification (PD passthrough); `1`–`3` **local-only diagnostic tiers**, no rerouting (`1` Reidemeister I only, `2` R I+II, `3` all local moves incl. assisted R1a/R2a) — for display and for benchmarking other simplifiers, *not* for hard diagrams; `4` path rerouting; `5` +summand/connect-sum detection; `6`+ full Reapr (randomized 3D embedding + compaction). The 3→4 boundary is deliberately **not** a superset: level 4 drops the local pass (upstream tuning found it doesn't help once rerouting engages), so per-level crossing counts need not be monotone between 3 and 4. The reference page demonstrates the tiers on the 128-crossing raw projection of a Gaussian random 100-gon (`SeedRandom[5]`, `"RandomizeProjection" -> False`): 128 → 119 (R1) → 45 (R1+R2) → 18 (all local) → 6 (full pipeline; `KnoodleIdentify` names it 6_2), with Haken's Gordian unknot as the counterpoint that stays at 141 crossings at every level below full. |
 | `"RandomizeProjection"` | `True` | Same semantics as `KnoodleDraw`'s option of the same name — see there. |
 | `"Unite"` | `False` | **The most important option for composite/split links.** `False` (default) matches `knoodlesimplify`'s own `--split` output shape: one diagram per diagrammatically-prime connect-sum factor, with same-colored factors belonging to the same original link component (colors are globally persistent/traceable across the whole complex — confirmed by reading `Split.hpp`, never renumbered per-summand). This is the natural input shape for `KnoodleIdentify` on a composite knot (e.g. the granny knot round-trips as *two separate* `KnotSymbol[3,1,...]` summands in this shape, with multiplicity 2 once identified). `True` uses `--unite`, which connect-sums same-colored factors *back together* via genuine arc splicing, giving one diagram per physically split link component — the natural single-PD-code-per-component form for exporting to KnotTheory or Regina. See the dedicated section below — getting this option's C++ implementation right took two attempts. |
 | `"SimplifyOptions"` | `{}` | Forwards arbitrary `knoodlesimplify` flags, same passthrough convention as `KnoodleDraw`'s `"LayoutOptions"` (`"name"->value` → `--name=value`; `"name"->True`/`False` → `--name`/`--no-name`). This is how to reach the full `PlanarDiagramComplex::Simplify_Args_T` surface (see table below) beyond the coarse `"SimplifyLevel"` preset. |
+| `"OutputFormat"` | `"PlanarDiagramComplex"` | `"KnotTheory"` returns KnotTheory\` PD codes instead of a `PlanarDiagramComplex` — one `PD[X[...], ...]` per **physically split portion** of the link (a bare `PD` when there is only one, a list otherwise; a 0-crossing portion is KnotTheory's `PD[Loop[1]]`) — ready for KnotTheory invariant computations (`Jones[pd][q]` etc.). Implies `"Unite" -> True`: PD codes cannot express that separate diagrams share a link component (the complex's cross-summand colors), so same-colored connect-sum factors are spliced together first. Implementation is **WL-side** (the CLI still emits the full PDC, so nothing is lost internally): the `PD`/`X`/`Loop` heads are created in the KnotTheory\` context *without* loading the package (a later ``Needs["KnotTheory`"]`` binds the same symbols), arcs are 1-based per KnotTheory's convention, and — because the CLI's `--unite` merges physically split components into one `s` block with disjoint arc ranges (verified 2026-07-04) — split portions are recovered WL-side as connected components of the crossings-sharing-arcs graph, each rank-renumbered to a self-contained code. |
 
 ### `"SimplifyOptions"` flags (full `Simplify_Args_T` surface)
 
@@ -208,3 +209,20 @@ grannyPlusUnknot = {
 KnoodleSimplify[grannyPlusUnknot]                  (* 3 summands: two 3_1's + an unknot *)
 KnoodleSimplify[grannyPlusUnknot, "Unite" -> True] (* 2 summands: one 6-crossing granny knot + the unknot *)
 ```
+
+```
+(* the reference page's color-semantics example: the connect sum of a
+   trefoil (on component 0) and a Hopf link (components 0 and 1), as
+   colored 6-column PD input *)
+trefC = {{0, 3, 1, 4, 0, 0}, {2, 5, 3, 0, 0, 0}, {4, 1, 5, 2, 0, 0}};
+hopfC = {{3, 0, 2, 1, 1, 0}, {1, 2, 0, 3, 0, 1}};
+KnoodleDraw[KnoodleSimplify[{trefC, hopfC}, "Unite" -> True], PlotLegends -> Automatic]
+Row[KnoodleDraw[KnoodleSimplify[{trefC, hopfC}], PlotLegends -> Automatic]]
+```
+
+United: one connected 5-crossing two-component diagram. Split: two prime
+factors whose **strand colors are meaningful across the summands** — same
+color, same physical link component (`KnoodleDraw` colors by the wire
+colors the complex carries; see `KnoodleDraw.md`'s "Component coloring").
+The trefoil factor draws entirely in component 0's color, the same color as
+the Hopf strand it is tied into.

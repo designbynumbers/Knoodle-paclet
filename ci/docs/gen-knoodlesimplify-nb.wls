@@ -7,13 +7,25 @@
 (* Repo root: this script lives in ci/docs/. *)
 $repo = ExpandFileName[FileNameJoin[{DirectoryName[$InputFileName], "..", ".."}]];
 Get[FileNameJoin[{$repo, "Kernel", "Knoodle.wl"}]];
+(* KnotTheory` is needed by the "OutputFormat" -> "KnotTheory" example (it
+   computes Jones polynomials for real -- pure symbolic computation, safe in
+   any kernel, unlike DrawPD) and must load before the example definitions
+   below so their PD/X/Jones symbols parse into the KnotTheory` context. *)
+Needs["KnotTheory`"];
 (* Register the source checkout as a paclet so AssetLocation lookups in the
    examples resolve during generation, same as on an installed paclet. *)
 PacletDirectoryLoad[$repo];
 
 $out = FileNameJoin[{$repo, "Documentation", "English", "ReferencePages", "Symbols", "KnoodleSimplify.nb"}];
 
-inCell[h_HoldForm] := Cell[BoxData[ToBoxes[h]], "Input"];
+(* Input cells: built from the code's InputForm string through the front
+   end's own parser -- exactly the boxes typing would produce, so the cell
+   re-evaluates like ordinary user input. The old ToBoxes[HoldForm[...]]
+   made doc inputs display-only no-ops and applied output formatting to
+   unevaluated input (see gen-knoodledraw-nb.wls for the full story). *)
+heldInputForm[HoldForm[e_]] := ToString[Unevaluated[e], InputForm];
+inCell[h_HoldForm] := Cell[BoxData[First @ First @ UsingFrontEnd @ MathLink`CallFrontEnd[
+      FrontEnd`UndocumentedTestFEParserPacket[heldInputForm[h], False]]], "Input"];
 group[h_HoldForm] := Module[{res = ReleaseHold[h]},
   Cell[CellGroupData[{inCell[h], Cell[BoxData[ToBoxes[res]], "Output"]}, Open]]];
 silent[h_HoldForm] := (ReleaseHold[h]; inCell[h]);
@@ -56,9 +68,9 @@ recorded as an unknot summand of the complex rather than disappearing."],
    notes["The following options can be given:"],
    Cell[BoxData[GridBox[{
       optRow[ToBoxes["SimplifyLevel"], "Automatic",
-       "simplification effort: 0 none, 3 Reidemeister I+II, 4 adds path \
-rerouting, 5 adds summand detection; Automatic (or 6 and up) is the full \
-Reapr pipeline"],
+       "simplification effort: 0 none; 1, 2, 3 are local-only tiers \
+(Reidemeister I; I+II; all local moves); 4 path rerouting; 5 adds summand \
+detection; Automatic (or 6 and up) is the full Reapr pipeline"],
       optRow[ToBoxes["Unite"], "False",
        "False: one diagram per prime connect-sum factor; True: reconnect \
 same-colored factors into one diagram per split component"],
@@ -67,7 +79,12 @@ same-colored factors into one diagram per split component"],
 projections; set False for reproducibility"],
       optRow[ToBoxes["SimplifyOptions"], RowBox[{"{", "}"}],
        "extra knoodlesimplify flags, e.g. {\"dijkstra-strategy\" -> \
-\"alternating\"}; see knoodlesimplify --help"]
+\"alternating\"}; see knoodlesimplify --help"],
+      optRow[ToBoxes["OutputFormat"], ToBoxes["PlanarDiagramComplex"],
+       "\"KnotTheory\" returns KnotTheory` PD codes instead: one \
+PD[X[...], ...] per physically split portion of the link (a list when \
+there are several; PD[Loop[1]] for a 0-crossing portion). Implies \
+\"Unite\" -> True"]
       }]], "3ColumnTableMod"]
    }, Open]];
 
@@ -89,14 +106,60 @@ it:"],
        RandomVariate[NormalDistribution[], {n, 3}], Mean, 1 &]]]],
    silent[HoldForm[SeedRandom[1]; P = GaussianRandomPolygon[5000];]],
    group[HoldForm[split = KnoodleSimplify[P]]],
-   text["Drawing the complex shows one diagram per prime factor:"],
-   group[HoldForm[KnoodleDraw[split, ImageSize -> 620]]],
+   text["Drawing the complex gives one diagram per prime factor, at a \
+common scale:"],
+   group[HoldForm[Row[KnoodleDraw[split, ImageSize -> 280], Spacer[10]]]],
    text["\"Unite\" -> True connect-sums the factors back together into a \
 single 51-crossing diagram of the same knot:"],
    group[HoldForm[KnoodleDraw[KnoodleSimplify[P, "Unite" -> True],
       ImageSize -> 320]]],
    text["KnoodleIdentify accepts the complex directly and names the factors:"],
    group[HoldForm[KnoodleIdentify[split]]]};
+
+exSum = {
+   delim,
+   text["Colors carry link-component identity through a complex. Here a \
+composite link -- the connect sum of a trefoil and a Hopf link -- as native \
+colored PD input: the last two columns of each crossing row are the \
+incoming under- and over-arcs' component colors, so the trefoil rows live \
+on component 0 while the Hopf rows carry components 0 and 1:"],
+   silent[HoldForm[trefC = {{0, 3, 1, 4, 0, 0}, {2, 5, 3, 0, 0, 0},
+       {4, 1, 5, 2, 0, 0}};]],
+   silent[HoldForm[hopfC = {{3, 0, 2, 1, 1, 0}, {1, 2, 0, 3, 0, 1}};]],
+   text["\"Unite\" -> True splices same-colored factors together: the whole \
+link is one connected 5-crossing diagram with two components:"],
+   group[HoldForm[KnoodleDraw[KnoodleSimplify[{trefC, hopfC}, "Unite" -> True],
+      PlotLegends -> Automatic, ImageSize -> 220]]],
+   text["The default split shape gives one diagram per diagrammatically \
+prime factor, and the colors are meaningful across the summands: same \
+color, same link component. The trefoil factor draws entirely in component \
+0's color -- the same color as the strand that threads the Hopf factor -- \
+because that is the component the trefoil is tied into:"],
+   group[HoldForm[Row[KnoodleDraw[KnoodleSimplify[{trefC, hopfC}],
+       PlotLegends -> Automatic, ImageSize -> 180], Spacer[15]]]]};
+
+exKT = {
+   delim,
+   text["To compute invariants with the KnotTheory` package, request the \
+result as KnotTheory PD codes: \"OutputFormat\" -> \"KnotTheory\" returns \
+one PD[X[...], ...] per physically split portion of the link (a bare PD \
+code when there is only one). PD codes cannot express that separate \
+diagrams share a link component, so this implies \"Unite\" -> True. This \
+200-vertex Gaussian random polygon is a composite knot (a trefoil \
+connect-summed with a 5_2); it simplifies straight to a single 8-crossing \
+PD code, the factors united:"],
+   silent[HoldForm[Needs["KnotTheory`"]]],
+   silent[HoldForm[SeedRandom[5]; R = GaussianRandomPolygon[200];]],
+   group[HoldForm[pdR = KnoodleSimplify[R, "OutputFormat" -> "KnotTheory",
+      "RandomizeProjection" -> False]]],
+   text["The result feeds KnotTheory's invariant machinery directly -- \
+here its Jones polynomial:"],
+   group[HoldForm[Jones[pdR][q]]],
+   text["The trefoil-with-Hopf-link connect sum from the previous example \
+unites into a single two-component code, and KnotTheory computes link \
+invariants from it just as directly:"],
+   group[HoldForm[pdTH = KnoodleSimplify[{trefC, hopfC}, "OutputFormat" -> "KnotTheory"]]],
+   group[HoldForm[Jones[pdTH][q]]]};
 
 exLink = {
    delim,
@@ -163,11 +226,26 @@ examples (59, 51, and 48 crossings) ship with this paclet:"],
 
 ex5 = {
    delim,
-   text["\"SimplifyLevel\" controls how hard KnoodleSimplify works: level 3 \
-uses Reidemeister I+II moves only, level 4 adds path rerouting, level 5 adds \
-summand detection, and the default is the full Reapr pipeline. Haken's \
-141-crossing Gordian unknot is completely rigid under everything below the \
-full pipeline:"],
+   text["\"SimplifyLevel\" controls how hard KnoodleSimplify works. Levels \
+1-3 are local-only diagnostic tiers: 1 removes Reidemeister I kinks, 2 uses \
+Reidemeister I and II, 3 all local moves. Level 4 switches to path \
+rerouting, 5 adds connect-sum detection, and the default (Automatic, or 6 \
+and up) is the full Reapr pipeline. Each tier bites deeper into the \
+128-crossing raw projection of a Gaussian random 100-gon:"],
+   silent[HoldForm[SeedRandom[5]; Q = GaussianRandomPolygon[100];]],
+   group[HoldForm[stages = KnoodleSimplify[Q, "SimplifyLevel" -> #,
+        "RandomizeProjection" -> False] & /@ {0, 1, 2, 3, Automatic}]],
+   text["Drawing the five stages at one glance -- 128 crossings raw, 119 \
+after Reidemeister I, 45 after I+II, 18 after all local moves, and the \
+6-crossing minimal diagram from the full pipeline:"],
+   group[HoldForm[Row[MapThread[Labeled[KnoodleDraw[#1, ImageSize -> 128], #2] &,
+      {stages, {"0", "1", "2", "3", "Automatic"}}], Spacer[10]]]],
+   text["The fully simplified polygon is the knot 6_2:"],
+   group[HoldForm[KnoodleIdentify[Last[stages]]]],
+   text["The local tiers are diagnostic, not a cheaper substitute for the \
+pipeline: Haken's 141-crossing Gordian unknot has no local moves and no \
+reroutes available at all, so every level below the full pipeline returns \
+it untouched:"],
    silent[HoldForm[haken = Last[hardunknots];]],
    group[HoldForm[KnoodleSimplify[haken, "SimplifyLevel" -> #] & /@ {3, 4, 5}]],
    group[HoldForm[KnoodleSimplify[haken]]]};
@@ -177,7 +255,7 @@ examplesSection = Cell[CellGroupData[Flatten[{
            "PrimaryExamplesSection"], ""}}], $Line = 0; Null]],
      "PrimaryExamplesSection"],
     silent[HoldForm[Needs["Knoodle`"]]],
-    ex1, pdExplainerCells, ex2, exLink, ex3, ex4, ex5}], Open]];
+    ex1, pdExplainerCells, ex2, exSum, exKT, exLink, ex3, ex4, ex5}], Open]];
 
 nb = Notebook[{categorization, usageSection, examplesSection},
    StyleDefinitions -> FrontEnd`FileName[{"Wolfram"},

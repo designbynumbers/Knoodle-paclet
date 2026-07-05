@@ -9,20 +9,24 @@
 BeginPackage["Knoodle`"];
 
 KnoodleDraw::usage =
-  "KnoodleDraw[input] renders a knot or link diagram as a Graphics object. \
-input may be a KnotData/Knot specification (e.g. {3,1} or \"Trefoil\"), a KnotTheory \
-PD[X[...]] / DTCode / GaussCode, a list of 3D points, or a native Knoodle PD code \
-(rows of 4 or 5 integers). Option \"Simplify\" (Automatic) controls whether the given \
-diagram is drawn as-is or a simplified diagram of the same knot is drawn. Option \
-\"Checkerboard\" (False) shades the diagram's two-colorable faces. Option \"Labels\" \
-(a subset of {\"Crossings\",\"Arcs\",\"Faces\"}) annotates the diagram with 0-based \
-element ids.";
+  "KnoodleDraw[input] renders a knot or link diagram as a Graphics object -- or, when \
+the input yields several diagrams (a PlanarDiagramComplex or other multi-summand input), \
+a list of Graphics sharing one common scale. input may be a KnotData/Knot specification \
+(e.g. {3,1} or \"Trefoil\"), a KnotTheory PD[X[...]] / DTCode / GaussCode, a list of 3D \
+points, or a native Knoodle PD code (rows of 4 or 5 integers). Option \"Simplify\" \
+(Automatic) controls whether the given diagram is drawn as-is or a simplified diagram of \
+the same knot is drawn. Option \"Checkerboard\" (False) shades the diagram's \
+two-colorable faces. Option \"Labels\" (a subset of {\"Crossings\",\"Arcs\",\"Faces\"}) \
+annotates the diagram with 0-based element ids; LabelStyle styles the label text. \
+Option \"Orientation\" (False) marks each arc's direction with arrowheads.";
 
 KnoodleSimplify::usage =
   "KnoodleSimplify[input] simplifies a knot or link diagram, returning a PlanarDiagramComplex \
 object that KnoodleDraw can render directly. input accepts the same representations as \
 KnoodleDraw. Option \"SimplifyLevel\" (Automatic, knoodlesimplify's own default) sets the \
-simplification effort. \"RandomizeProjection\" (True) applies a random shear before \
+simplification effort: 0 none, 1-3 local-only Reidemeister tiers (I; I+II; all local \
+moves), 4 path rerouting, 5 adds summand detection, 6+ (= Automatic) the full Reapr \
+pipeline. \"RandomizeProjection\" (True) applies a random shear before \
 projecting 3D input, as in KnoodleDraw. \"Unite\" (False, i.e. the default \"split\" shape) \
 controls the output shape for composite/split links: False gives one diagram per \
 diagrammatically-prime factor (same-colored factors share a link component -- the natural \
@@ -32,7 +36,11 @@ together via PlanarDiagramComplex::Connect, giving one diagram per physically sp
 forwards arbitrary knoodlesimplify flags controlling PlanarDiagramComplex::Simplify's \
 algorithm (e.g. {\"dijkstra-strategy\"->\"alternating\", \"canonicalize\"->False} -- see \
 knoodlesimplify --help for the full list), the same passthrough convention as \
-KnoodleDraw's \"LayoutOptions\".";
+KnoodleDraw's \"LayoutOptions\". \"OutputFormat\" -> \"KnotTheory\" returns KnotTheory` \
+PD codes instead of a PlanarDiagramComplex -- one PD[X[...],...] per physically split \
+portion (a list when there are several; PD[Loop[1]] for a 0-crossing portion), ready for \
+KnotTheory invariant computations; this implies \"Unite\" -> True, since PD codes cannot \
+express that separate diagrams share a link component.";
 
 PlanarDiagramComplex::usage =
   "PlanarDiagramComplex[<|\"serialized\"->...|>] wraps the result of KnoodleSimplify: a \
@@ -99,27 +107,13 @@ If[$OperatingSystem =!= "Windows",
      ("\"" <> exe[#] <> "\"") & /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify"}, " "]]];
 
 (* Square grid spacing requested from knoodledraw (see runGeometry). One grid
-   square is this many coordinate units; the corner radius is a fraction of it. *)
+   square is this many coordinate units. Rendering follows DRAWING-SPEC.md,
+   whose unit of account is the subgrid unit u = 1 coordinate unit = 1/4 of
+   this pitch: subgrid squares are the closed 1x1 squares centered on the
+   lattice's points and lines, and every decoration (arrowhead, arc label,
+   crossing gap) lives in its own reserved subgrid square, so nothing ever
+   collides (spec sections 1-2). *)
 $gridSize = 4;
-
-(* Strand width used by "Thickness" -> Automatic, in the same coordinate units.
-   knoodledraw insets each under-strand endpoint by 1 unit, so the visible break
-   at a crossing is 2 units wide; half a unit of stroke leaves clear daylight on
-   both sides at any drawing scale. *)
-$strandWidth = 0.5;
-
-(* Orientation arrowhead length as a multiple of the stroke width -- drafting
-   standards (ASME Y14.2) size heads proportionally to line weight and solid-
-   filled, so ~3.5x the stroke reads as a matched, deliberate head. *)
-$arrowLengthFactor = 3.5;
-
-(* Solid swept-back arrowhead for orientation arrows: tip at the origin, unit
-   length, 0.72 wide with a shallow tail notch. Wider than the front-end's
-   default head so its wings clearly clear a thick stroke, and drawn with no
-   color directive of its own so it inherits each strand's color (verified:
-   an undirected Polygon in an Arrowheads graphic picks up the ambient
-   stroke color). *)
-$arrowShape = Graphics[Polygon[{{-1, 0.36}, {0, 0}, {-1, -0.36}, {-0.75, 0}}]];
 
 (* ---- context-free head test (KnotTheory symbols live in various contexts) ---- *)
 headNameQ[x_, name_String] := MatchQ[Head[x], _Symbol] && SymbolName[Head[x]] === name;
@@ -186,6 +180,49 @@ runSimplifyPdc[in_, extraFlags_List] := If[Head[in] === File,
    RunProcess[Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags],
      "StandardOutput", in]
 ];
+
+(* ---- KnotTheory-format output ("OutputFormat" -> "KnotTheory") ----
+   Convert a united PDC serialization into KnotTheory` PD codes on the WL
+   side -- the CLI keeps emitting the full PlanarDiagramComplex (nothing is
+   lost internally); only this final hop drops what PD codes cannot carry.
+   Each "s <flag>" block is one physically split portion of the link: its
+   rows' first four columns are Knoodle's 0-based arc labels in exactly
+   KnotTheory's X convention, so the code is rows+1 wrapped in X and PD. A
+   "u <color>" line is a 0-crossing portion: KnotTheory's PD[Loop[1]]. The
+   PD/X/Loop heads are created in the KnotTheory` context WITHOUT loading
+   the package -- they are the same symbols a later Needs["KnotTheory`"]
+   declares, so results made before the load work after it. *)
+pdcPortions[s_String] := Module[{blocks = {}, cur = None, flush},
+  flush[] := If[cur =!= None, AppendTo[blocks, cur]; cur = None];
+  Do[Which[
+     StringStartsQ[line, "u"], flush[]; AppendTo[blocks, "Unknot"],
+     StringStartsQ[line, "s"], flush[]; cur = {},
+     StringContainsQ[line, "\t"],
+      If[cur === None, cur = {}];
+      AppendTo[cur, ToExpression /@ StringSplit[line, "\t"]],
+     True, Null],                                (* "k" markers, blank lines *)
+   {line, StringSplit[s, "\n"]}];
+  flush[];
+  blocks];
+
+(* One united "s" block can still hold several physically split pieces (the
+   CLI's --unite merges split components into one block, arcs disjointly
+   renumbered). Split-ness is exactly connectivity of crossings through
+   shared arc labels, so the pieces are the connected components of that
+   graph. Each piece's arcs are renumbered by rank -- order-preserving, so
+   Knoodle's along-the-strand numbering (and hence KnotTheory's implied
+   orientation convention) survives -- giving a self-contained code. *)
+splitPieces[rows_List] := Module[{byArc, edges, comps},
+  byArc = GroupBy[Flatten[MapIndexed[Thread[{#2[[1]], #1[[1 ;; 4]]}] &, rows], 1],
+    Last -> First];
+  edges = UndirectedEdge @@@ Select[Union /@ Values[byArc], Length[#] == 2 &];
+  comps = SortBy[ConnectedComponents[Graph[Range[Length[rows]], edges]], Min];
+  Function[piece, With[{arcs = Union @@ piece[[All, 1 ;; 4]]},
+     piece /. Thread[arcs -> Range[Length[arcs]] - 1]]][rows[[Sort[#], 1 ;; 4]]] & /@ comps];
+
+toKnotTheoryPD["Unknot"] := Symbol["KnotTheory`PD"][Symbol["KnotTheory`Loop"][1]];
+toKnotTheoryPD[rows_List] :=
+  Symbol["KnotTheory`PD"] @@ (Symbol["KnotTheory`X"] @@@ (rows + 1));
 
 (* ---- cheap line-prefix summary of a PDC-native serialized string, for
    PlanarDiagramComplex's summary box (below) -- every line is either a
@@ -279,12 +316,14 @@ toTSV[c_ /; headNameQ[c, "DTCode"] || headNameQ[c, "GaussCode"]] :=
 toTSV[pdc_ /; headNameQ[pdc, "PlanarDiagramComplex"]] := {pdc[[1, "serialized"]], False};
 toTSV[other_] := (Message[KnoodleDraw::badinput, other]; $Failed);
 
-(* ---- corner rounding: replace each 90-degree bend with a circular arc of the
-   given (fixed) radius, tangent to both edges. The radius is a fraction of one
-   grid square (not of the edge), so long edges do not get larger arcs and the
-   arc always stays inside the corner's grid cell (radius <= half a grid square).
-   Clamped to half the shorter adjacent edge only to stay within pathologically
-   short edges. *)
+(* ---- bends (spec 3.3): every 90-degree bend is a quarter-circle of radius
+   exactly u/2, tangent to both strand centerlines, so the whole bend (stroke
+   included) stays inside the lattice point's corner subgrid square. The radius
+   is forced -- tangency plus containment leave no free parameter -- which is
+   why the old "CornerRadius" option no longer exists. cornerArc's clamp to
+   half the shorter adjacent edge is a safety net only: OrthoDraw edges are at
+   least one full grid pitch, and label cuts keep >= 3u/2 of straight run on
+   either side of a bend. *)
 cornerArc[Pm_, Pi_, Pp_, radius_] := Module[{Lin, Lout, uin, uout, d, a, b},
   Lin = EuclideanDistance[Pm, Pi]; Lout = EuclideanDistance[Pi, Pp];
   If[Lin < 1.*^-9 || Lout < 1.*^-9, Return[Nothing]];
@@ -308,14 +347,98 @@ roundedPolyline[pts_, radius_] := Module[{out = {N@First[pts]}, ca},
   Append[out, N@Last[pts]]
 ];
 
-(* ---- label styling: matches system plotting functions (Plot, Graph, ...), which
-   never hardcode a FontFamily -- LabelStyle/BaseStyle resolve to {} even on a
-   fully-resolved Plot, so fonts are purely inherited from the notebook stylesheet.
-   Mirroring that (no FontFamily here either) makes labels track whatever font the
-   surrounding notebook already uses. Color/opacity use the theme system (ThemeColor,
-   LightDark-aware) rather than fixed grays, so labels stay legible and appropriately
-   subdued in both light and dark mode, and under custom notebook themes. *)
-labelStyle[sz_ : 11] := Style[#, sz, Opacity[0.7], ThemeColor["Foreground"]] &;
+(* ---- under-strand gaps (spec 3.4): the under-strand is cut exactly on the
+   crossing's corner-square boundary, u/2 from the crossing point, but
+   knoodledraw's --gap-size is integer-only and insets each under-strand
+   endpoint by a full unit. An arc endpoint at Manhattan distance exactly 1
+   from a crossing is such an inset endpoint -- over-strand endpoints sit
+   exactly ON their crossing, and distinct lattice events are a full grid
+   pitch apart, so there are no false matches -- and is pulled halfway back
+   in. Exact (integer -> half-integer) arithmetic, so the station enumeration
+   below stays exact. *)
+underGapEnd[crossPos_][p_] := With[
+   {c = SelectFirst[crossPos, Total[Abs[p - #]] == 1 &]},
+   If[MissingQ[c], p, (p + c)/2]];
+underGapPoints[pts_, crossPos_] := MapAt[underGapEnd[crossPos], pts, {{1}, {-1}}];
+
+(* Stations along the axis-aligned segment a -> b (varying coordinate index i):
+   the points whose varying coordinate is congruent to a residue in res, mod
+   the grid pitch. Arrowhead subgrid squares sit at offsets 1 and 3 along
+   every drawing edge (spec 4), arc-label squares at offset 2, the edge
+   midpoint (spec 5); the fixed coordinate is always on a lattice line, so
+   these are exactly the reserved squares' centers. *)
+stations[a_, b_, i_, res_] := With[{lo = Min[a[[i]], b[[i]]], hi = Max[a[[i]], b[[i]]]},
+   ReplacePart[a, i -> #] & /@ Select[Range[Ceiling[lo], Floor[hi]], MemberQ[res, Mod[#, $gridSize]] &]];
+
+(* One pass over an arc's polyline: collect arrowhead specs {center, direction}
+   for every traversed arrowhead square (spec 4.1) and arc-label specs
+   {center, textDirection} for every traversed arc-label square (spec 5.2-3:
+   horizontal edges read left-to-right; vertical edges read along the arc's
+   orientation), and -- when cutQ, i.e. arc labels are shown -- cut the
+   polyline at each label square's two boundaries, u/2 to either side of its
+   center, so the label sits inline in the gap (spec 5.1). Cut centers are
+   always >= 3u/2 from the nearest vertex, so cuts never touch bends, and
+   every piece keeps >= 2 points. *)
+arcDecorations[pts_, cutQ_] := Module[
+  {cur = {First[pts]}, pieces = {}, arrows = {}, labels = {}, i, dir, mids},
+  Do[
+   i = If[seg[[1, 1]] == seg[[2, 1]], 2, 1];
+   dir = Sign[seg[[2]] - seg[[1]]];
+   arrows = Join[arrows, {#, dir} & /@ stations[seg[[1]], seg[[2]], i, {1, 3}]];
+   mids = SortBy[stations[seg[[1]], seg[[2]], i, {2}], dir[[i]] #[[i]] &];
+   labels = Join[labels, {#, If[i == 1, {1, 0}, dir]} & /@ mids];
+   If[cutQ, Do[AppendTo[cur, m - dir/2]; AppendTo[pieces, cur]; cur = {m + dir/2}, {m, mids}]];
+   AppendTo[cur, seg[[2]]],
+   {seg, Partition[pts, 2, 1]}];
+  <|"Pieces" -> Append[pieces, cur], "Arrows" -> arrows, "Labels" -> labels|>
+];
+
+(* ---- orientation arrowheads (spec 4.2-3): a solid swept-back head
+   superimposed on the continuous strand, centered in its subgrid square and
+   pointing along dir -- 0.9u tip-to-tail, 0.65u wide, so it fits the 1x1
+   square at any drawing scale. It is a coordinate-space Polygon, deliberately
+   NOT an Arrowheads[] spec (whose size would track the image instead of the
+   grid), and carries no color directive so it inherits the ambient strand
+   color. *)
+$arrowheadPts = 0.9 {{-1, 0.36}, {0, 0}, {-1, -0.36}, {-0.75, 0}};
+arrowheadPolygon[pos_, dir : {dx_, dy_}] :=
+  Polygon[(pos + 0.45 dir + {{dx, -dy}, {dy, dx}} . #) & /@ $arrowheadPts];
+
+(* ---- label text style (spec 8.4): the default pins FontFamily ->
+   "Source Sans Pro" (bundled in every Wolfram installation's
+   SystemFiles/Fonts), because the largest-fit sizing below is only exact for
+   a font the kernel can measure at drawing time; color/opacity use the theme
+   system (ThemeColor, LightDark-aware) so labels stay legible in both modes.
+   User LabelStyle directives merge AFTER the defaults, so LabelStyle -> Bold
+   bolds the pinned font while LabelStyle -> {FontFamily -> ...} swaps it --
+   and measurement runs under the fully merged style, so a wider family or
+   weight automatically participates in the fit. *)
+$labelBaseStyle = {Opacity[0.7], ThemeColor["Foreground"], FontFamily -> "Source Sans Pro"};
+resolveLabelStyle[user_] := Join[$labelBaseStyle,
+   DeleteCases[Flatten[{user} //. Directive[d___] :> {d}], None | Automatic]];
+
+(* A numeric font size requested inside LabelStyle (bare number or
+   FontSize -> n), for the spec 8.5 precedence rules; None when absent. *)
+userFontSize[dirs_] := Replace[
+   Cases[dirs, fs_?NumericQ | (FontSize -> fs_?NumericQ) :> fs],
+   {{} -> None, l_ :> Last[l]}];
+
+(* Rendered extent of one label in points, per point of font size, measured
+   under the fully resolved style (spec 8.2: extent, not character count, is
+   the constrained quantity). Text metrics are linear in FontSize, so one
+   measurement at a reference size suffices. Rasterize needs a front end; if
+   none is reachable, fall back to a generous digit-metric estimate so
+   headless drawing still works. *)
+labelExtent[text_, dirs_List] := Quiet @ Check[
+   Most[Rasterize[Style[text, Sequence @@ dirs, FontSize -> 96], "BoundingBox"]]/96.,
+   {0.65 StringLength[ToString[text]], 1.6}];
+
+(* Largest font size that fits a measured extent into a box of {w, h} subgrid
+   units, per unit of the points-per-u scale. Sized to a fixed safety fraction
+   of the box (spec 8.6) so platform rasterization differences can't overflow
+   it. *)
+$fitFraction = 0.96;
+fitCoeff[ext_, box_] := Min[box/ext];
 
 (* ---- polygon centroid (area-weighted; falls back to a vertex average for
    degenerate/zero-area or self-touching boundaries) -- used for face labels. *)
@@ -332,16 +455,18 @@ polygonCentroid[pts_] := Module[{p, n, cross, area, cx, cy},
   {cx, cy}
 ];
 
-(* ---- face label placement: a discretized "pole of inaccessibility", restricted
-   to grid-square centers, so it stays well inside even very non-convex faces
-   (a plain polygon centroid can land outside a non-convex face entirely).
-   A grid square is one cell of OrthoDraw's own layout grid (BoundingBox is its
-   width/height in cells); its center in Points/Boundary coordinates is offset
-   by half a grid square from the cell's corner. Boundary distance and
-   containment both come straight from the Region framework -- no hand-rolled
-   geometry. *)
+(* ---- face label placement (spec 7): a discretized "pole of inaccessibility",
+   restricted to grid-square centers, so it stays well inside even very
+   non-convex faces (a plain polygon centroid can land outside a non-convex
+   face entirely). A grid square is one cell of OrthoDraw's own layout grid
+   (BoundingBox is its width/height in cells). Boundary distance and
+   containment both come straight from the Region framework. The label is
+   then centered in the host cell's (2,2)-(3,2) reserved subgrid region --
+   u/2 to the right of the cell center. *)
 gridSquareCenters[w_, h_] := Flatten[
    Table[$gridSize {i + 1/2, j + 1/2}, {i, 0, w - 1}, {j, 0, h - 1}], 1];
+
+$faceRegionOffset = {1/2, 0};
 
 (* Lexicographic-max of {distance, x, y} -- WL's default Sort/Order on same-shape
    lists of reals is lexicographic, so Last@Sort gives exactly that: farthest
@@ -351,59 +476,29 @@ lexBest[scored_] := Last[Sort[scored]][[{2, 3}]];
 interiorFaceLabelPos[face_, w_, h_] := Module[{poly = face["Boundary"], inside},
   inside = Select[gridSquareCenters[w, h], RegionMember[Polygon[poly]]];
   If[inside === {}, Return[polygonCentroid[poly]]];  (* face smaller than one grid cell *)
-  lexBest[{RegionDistance[Line[poly], #], #[[1]], #[[2]]} & /@ inside]
+  lexBest[{RegionDistance[Line[poly], #], #[[1]], #[[2]]} & /@ inside] + $faceRegionOffset
 ];
 
-(* The exterior face is unbounded, so candidates are restricted to the ring of
-   grid cells framing the diagram's own bounding rectangle R (only R's right
-   edge grows if that ring turns up empty -- e.g. the diagram fills its box
-   edge-to-edge on all other sides). Distance is capped by closeness to R's own
-   edge too, so the label doesn't crowd the image boundary. *)
+(* The exterior face is unbounded, so candidates are the ring of grid cells
+   framing the diagram's own bounding rectangle R that belong to no interior
+   face; when that set is empty (the diagram fills R edge-to-edge), R grows
+   one column to the right, all of whose cells are exterior -- one extension
+   always suffices (spec 7.3). Distance is capped by closeness to R's own
+   boundary too, so the label doesn't crowd the image edge. *)
 exteriorFaceLabelPos[extFace_, w_, h_, interiorPolys_] := Module[
-  {expand = 0, rw, ring, notInterior, ex},
+  {rw = w, notInterior, ring, cand},
   notInterior = RegionMember[RegionUnion @@ (Polygon /@ interiorPolys)] /* Not;
-  While[True,
-   rw = w + expand;
-   ring = $gridSize (# + {1/2, 1/2}) & /@ Select[Tuples[{Range[0, rw - 1], Range[0, h - 1]}],
-      (#[[1]] == 0 || #[[1]] == rw - 1 || #[[2]] == 0 || #[[2]] == h - 1) &];
-   ex = Select[ring, notInterior];
-   If[ex =!= {} || expand > 20, Break[]];
-   expand++];
-  If[ex === {}, Return[polygonCentroid[extFace["Boundary"]]]];  (* shouldn't happen *)
-  lexBest[{Min[RegionDistance[Line[extFace["Boundary"]], #],
-       RegionDistance[RegionBoundary[Rectangle[{0, 0}, $gridSize {rw, h}]], #]], #[[1]], #[[2]]} & /@ ex]
+  ring = $gridSize (# + 1/2) & /@ Select[Tuples[{Range[0, w - 1], Range[0, h - 1]}],
+     (#[[1]] == 0 || #[[1]] == w - 1 || #[[2]] == 0 || #[[2]] == h - 1) &];
+  cand = Select[ring, notInterior];
+  If[cand === {}, rw = w + 1; cand = Table[$gridSize ({w, j} + 1/2), {j, 0, h - 1}]];
+  $faceRegionOffset + lexBest[{Min[RegionDistance[Line[extFace["Boundary"]], #],
+       RegionDistance[RegionBoundary[Rectangle[{0, 0}, $gridSize {rw, h}]], #]], #[[1]], #[[2]]} & /@ cand]
 ];
 
 faceLabelPos[face_, w_, h_, interiorPolys_] := If[TrueQ[face["Exterior"]],
    exteriorFaceLabelPos[face, w, h, interiorPolys],
    interiorFaceLabelPos[face, w, h]];
-
-(* ---- arc label placement, per spec, computed on the RAW (un-rounded) polyline:
-   - if the arc has a horizontal section, place the label's bottom-center at the
-     midpoint of its LONGEST horizontal segment, nudged up a bit (like underlining).
-   - if the arc is purely vertical (no horizontal segment at all), place the label's
-     left-center at the arc-length midpoint of the whole polyline, nudged right.
-   Every segment on this grid is axis-aligned, so these two cases are exhaustive. *)
-$labelGap = 0.35;
-arcLabelSpec[pts_] := Module[
-  {segs, horiz, longest, mid, lens, cum, total, half, i, t, pos},
-  segs = Partition[pts, 2, 1];
-  horiz = Select[segs, (#[[1, 2]] == #[[2, 2]]) &];
-  If[horiz =!= {},
-   longest = First[SortBy[horiz, -Abs[#[[2, 1]] - #[[1, 1]]] &]];
-   mid = {Mean[longest[[All, 1]]], longest[[1, 2]]};
-   {mid + {0, $labelGap}, {0, -1}}
-   ,
-   lens = EuclideanDistance @@@ segs;
-   cum = Prepend[Accumulate[lens], 0.];
-   total = Last[cum];
-   half = total/2;
-   i = Clip[LengthWhile[cum, # < half &], {1, Length[segs]}];
-   t = If[cum[[i + 1]] == cum[[i]], 0., (half - cum[[i]])/(cum[[i + 1]] - cum[[i]])];
-   pos = segs[[i, 1]] + t (segs[[i, 2]] - segs[[i, 1]]);
-   {pos + {$labelGap, 0}, {-1, 0}}
-   ]
-];
 
 (* ---- checkerboard face fill: low-opacity theme-color washes rather than fixed
    colors, so shading adapts to light/dark mode and to custom notebook themes.
@@ -414,162 +509,193 @@ faceFill[colorSign_] := If[colorSign > 0,
   {Opacity[0.14], ThemeColor["Accent1"]},
   {Opacity[0.045], ThemeColor["Foreground"]}];
 
-(* ---- orientation arrowheads ----
-   Arc polylines are emitted by knoodledraw in orientation order (verified:
-   per-arc arrows circulate consistently around each component), so an Arrow
-   over the same points shows the knot's orientation directly.
-
-   Anchor parameter (0..1, by arc length) for the arrowhead on polyline pts:
-   the midpoint of the longest single segment -- always the middle of a
-   straight run, never a rounded-corner chord (where the head's direction
-   would be ambiguous) and never an arc endpoint (so it cannot sit in, or
-   visually close, the under-strand break at a crossing). When arc labels are
-   shown they anchor at the midpoint of the longest horizontal segment
-   (arcLabelSpec), which is typically this same spot -- so segFrac drops from
-   1/2 to 0.3 to slide the head off the label's anchor. *)
-arrowParameter[pts_, segFrac_] := Module[{seglens = Norm /@ Differences[pts], cum, i},
-  cum = Accumulate[seglens];
-  i = First[Ordering[seglens, -1]];
-  (cum[[i]] - (1 - segFrac) seglens[[i]])/Last[cum]];
-
-(* Which arc Ids get an arrowhead: every arc for All; for True, one per link
-   component -- its longest arc, where the head is most at home (knot-theory
-   convention: orientation propagates, one arrow per component suffices). *)
-arcLength[arc_] := Total[Norm /@ Differences[N@arc["Points"]]];
-arrowArcIds[arcs_, All] := arcs[[All, "Id"]];
-arrowArcIds[arcs_, True] :=
-  Values[GroupBy[arcs, #["Component"] &, First[MaximalBy[#, arcLength]]["Id"] &]];
-arrowArcIds[_, _] := {};
-
-(* ---- render one summand's geometry association as a primitive list ----
-   compOffset shifts this summand's arc "Component" indices, so every summand in
-   a multi-summand picture (connect-sum factors / split components -- see
-   toTSV's multi-summand pattern) draws in its own run of ColorData[97] colors
-   instead of each restarting at color 1. radiusFrac is the corner radius as a
-   fraction of one grid square, in [0,1/2] (0 = sharp corners). checkerboardQ
-   shades faces; labelSet is a subset of {"Crossings","Arcs","Faces"}. orient
-   is the "Orientation" option (False/True/All); arrowFrac the arrowhead length
-   as a fraction of the full graphic width (computed scale-aware in render). *)
-summandPrimitives[assoc_Association, thick_, radiusFrac_, checkerboardQ_, labelSet_, compOffset_,
-  orient_, arrowFrac_] := Module[
-  {r = Clip[radiusFrac, {0, 0.5}] $gridSize, style = labelStyle[], interiorFaces, interiorPolys,
-   w, h, arrowIds, segFrac},
-
-  interiorFaces = If[KeyExistsQ[assoc, "Faces"], Select[assoc["Faces"], !TrueQ[#["Exterior"]] &], {}];
-  interiorPolys = interiorFaces[[All, "Boundary"]];
-  {w, h} = assoc["BoundingBox"];
-  arrowIds = arrowArcIds[assoc["Arcs"], orient];
-  segFrac = If[MemberQ[labelSet, "Arcs"], 0.3, 0.5];
-
-  {
-   (* faceFill[...] returns a *list* of directives ({Opacity[...], color}); it must be
-      spliced (Sequence @@) into the surrounding primitive list, not nested as a single
-      list element -- Graphics directive scoping does not propagate out of a nested
-      sub-list, so {{Opacity[...],color}, Polygon[...]} silently ignores the styling.
-      The exterior face is never filled (it isn't part of the checkerboard picture). *)
-   If[TrueQ[checkerboardQ],
-    Table[{Sequence @@ faceFill[face["Color"]], EdgeForm[], Polygon[face["Boundary"]]},
-      {face, interiorFaces}],
-    {}],
-
-   {CapForm["Round"], JoinForm["Round"], thick,
-    Table[With[{pts = If[r > 0, roundedPolyline[arc["Points"], r], N@arc["Points"]]},
-       {ColorData[97][arc["Component"] + compOffset + 1],
-        If[MemberQ[arrowIds, arc["Id"]] && Length[pts] >= 2,
-         {Arrowheads[{{arrowFrac, arrowParameter[pts, segFrac], $arrowShape}}], Arrow[pts]},
-         Line[pts]]}],
-      {arc, assoc["Arcs"]}]},
-
-   If[MemberQ[labelSet, "Crossings"] && KeyExistsQ[assoc, "Crossings"],
-    Table[Text[style[cr["Id"]], cr["Pos"], {-1, -1}, Background -> None],
-      {cr, assoc["Crossings"]}], {}],
-   If[MemberQ[labelSet, "Arcs"],
-    Table[Text[style[arc["Id"]], Sequence @@ arcLabelSpec[arc["Points"]], Background -> None],
-      {arc, assoc["Arcs"]}], {}],
-   If[MemberQ[labelSet, "Faces"] && KeyExistsQ[assoc, "Faces"],
-    Table[Text[style[face["Id"]], faceLabelPos[face, w, h, interiorPolys], {0, 0}, Background -> None],
-      {face, assoc["Faces"]}], {}]
-   }
-];
-
-(* A bare "<|"Unknot"->True|>" marker (knoodledraw's stand-in for a 0-crossing
-   summand -- see the C++-side comment on DrawKnot) draws as a simple loop, in
-   the same strand style, occupying one grid square. No orientation arrowhead:
-   the marker carries no arc data, so there is no orientation to show. *)
-unknotPrimitives[thick_, compOffset_] := {CapForm["Round"], JoinForm["Round"], thick,
-   ColorData[97][compOffset + 1], Circle[$gridSize {1/2, 1/2}, $gridSize/2]};
-
-geoWidth[assoc_] := If[KeyExistsQ[assoc, "Unknot"], $gridSize, First[assoc["BoundingBox"]] $gridSize];
 geoComponentCount[assoc_] := If[KeyExistsQ[assoc, "Unknot"], 1,
    Max[assoc["Arcs"][[All, "Component"]], -1] + 1];
 
-(* Lay out one or more summands (connect-sum factors / split components) left to
-   right, each gap grid squares apart, each in its own local coordinate frame
-   translated into place with the built-in Translate (no manual coordinate
-   arithmetic needed) -- and each claiming its own run of component colors, so
-   two unrelated summands never accidentally share "Component 0"'s color. *)
-$summandGap = 2;
-layoutGeos[geos_List, thick_, radiusFrac_, checkerboardQ_, labelSet_, orient_, arrowFrac_] :=
- Module[{x = 0, c = 0, prims, w, nc, dx},
-  Table[
-   {prims, w, nc} = If[KeyExistsQ[geo, "Unknot"],
-      {unknotPrimitives[thick, c], $gridSize, 1},
-      {summandPrimitives[geo, thick, radiusFrac, checkerboardQ, labelSet, c, orient, arrowFrac],
-       geoWidth[geo], geoComponentCount[geo]}];
-   dx = x; x += w + $summandGap $gridSize; c += nc;
-   Translate[prims, {dx, 0}],
-   {geo, geos}]
+(* ---- strand coloring ----
+   knoodledraw (since Knoodle 3fe15b0) exports each arc's raw wire color --
+   "Color", the physical link component, stable across every summand of one
+   drawing call -- alongside the per-summand topological "Component" index
+   (which restarts at 0 in each summand); colored unknot markers carry the
+   same key. When every record has it, all summands share ONE palette keyed
+   by these color classes: the connect-sum factors of a knot all draw in a
+   single color, and a split link's components keep their colors across
+   factors. When the key is absent (older binaries), fall back to the old
+   scheme: each summand claims its own fresh run of palette colors, keyed by
+   "Component" plus a running offset. Bare unknot markers without a color
+   (uncolored empty summands) get fresh palette slots after the wire
+   classes. wireColorIndex returns class -> palette index, or None for the
+   fallback. *)
+wireColorIndex[geos_List] := Module[{wire},
+  If[! AllTrue[geos, KeyExistsQ[#, "Unknot"] || AllTrue[#["Arcs"], KeyExistsQ[#, "Color"] &] &],
+   Return[None]];
+  wire = Union @@ Map[If[KeyExistsQ[#, "Unknot"],
+      If[KeyExistsQ[#, "Color"], {#["Color"]}, {}], Union[#["Arcs"][[All, "Color"]]]] &, geos];
+  AssociationThread[wire -> Range[Length[wire]]]];
+
+(* ---- per-summand drawing content ----------------------------------------
+   Everything about one summand except the two globally-resolved quantities
+   (font size and stroke width): checkerboard fills, strands (under-gaps
+   widened, label gaps cut, bends rounded), arrowheads, label records (text,
+   position, reading direction, and the {w, h} subgrid box the text must fit
+   -- 1x1 for arc labels, 2x1 for crossing and face labels, spec 8.2), the
+   plot range, and the summand's legend entries ({labels, swatch colors} for
+   PlotLegends). Strand colors: wire-color classes via idx when available
+   (see wireColorIndex -- labels are then the input's own component colors),
+   else the compOffset fallback, where each summand claims its own run of
+   ColorData[97] colors instead of restarting at color 1. ord is this
+   summand's ordinal among colorless unknot markers (wire mode only). *)
+(* off is the Text offset spec ({0, 0} = centered at pos; {-1, 0} = text's
+   left-center at pos, i.e. left-justified). *)
+labelRec[text_, pos_, dir_, box_, off_ : {0, 0}] :=
+  <|"Text" -> text, "Pos" -> pos, "Dir" -> dir, "Box" -> box, "Off" -> off|>;
+
+summandContent[assoc_, checkerboardQ_, labelSet_, orientQ_, compOffset_, idx_, ord_] := Module[
+  {w, h, crossPos, interiorFaces, interiorPolys, decs, fills, strands, labels, lows, highs,
+   strandColor, comps},
+  If[KeyExistsQ[assoc, "Unknot"], Return[unknotContent[assoc, compOffset, idx, ord]]];
+  strandColor = If[idx === None,
+    ColorData[97][#["Component"] + compOffset + 1] &,
+    ColorData[97][idx[#["Color"]]] &];
+  comps = If[idx === None,
+    With[{c = Union[assoc["Arcs"][[All, "Component"]]] + compOffset},
+     {c, ColorData[97][# + 1] & /@ c}],
+    With[{c = Union[assoc["Arcs"][[All, "Color"]]]},
+     {c, ColorData[97][idx[#]] & /@ c}]];
+  {w, h} = assoc["BoundingBox"];
+  crossPos = If[KeyExistsQ[assoc, "Crossings"], assoc["Crossings"][[All, "Pos"]], {}];
+  interiorFaces = If[KeyExistsQ[assoc, "Faces"], Select[assoc["Faces"], ! TrueQ[#["Exterior"]] &], {}];
+  interiorPolys = interiorFaces[[All, "Boundary"]];
+  decs = arcDecorations[underGapPoints[#["Points"], crossPos], MemberQ[labelSet, "Arcs"]] & /@
+    assoc["Arcs"];
+
+  (* faceFill[...] returns a *list* of directives ({Opacity[...], color}); it must be
+     spliced (Sequence @@) into the surrounding primitive list, not nested as a single
+     list element -- Graphics directive scoping does not propagate out of a nested
+     sub-list. The exterior face is never filled. *)
+  fills = If[TrueQ[checkerboardQ],
+    Table[{Sequence @@ faceFill[face["Color"]], EdgeForm[], Polygon[face["Boundary"]]},
+     {face, interiorFaces}], {}];
+
+  strands = MapThread[
+    {strandColor[#1],
+      Line[roundedPolyline[#, 1/2] & /@ #2["Pieces"]],
+      If[TrueQ[orientQ], arrowheadPolygon @@@ #2["Arrows"], Nothing]} &,
+    {assoc["Arcs"], decs}];
+
+  labels = Join[
+    If[MemberQ[labelSet, "Arcs"],
+     Join @@ MapThread[Function[{arc, dec},
+        labelRec[arc["Id"], #[[1]], #[[2]], {1, 1}] & /@ dec["Labels"]],
+       {assoc["Arcs"], decs}], {}],
+    (* a crossing's host cell is the one with the crossing at its (0,0) corner;
+       the label is left-justified in the (1,1)-(2,1) reserved region -- its
+       left-center (Text offset {-1, 0}) at the region's left edge, u {1/2, 1}
+       up-right of the crossing point, the edge nearest the crossing (spec 6) *)
+    If[MemberQ[labelSet, "Crossings"] && KeyExistsQ[assoc, "Crossings"],
+     labelRec[#["Id"], #["Pos"] + {1/2, 1}, {1, 0}, {2, 1}, {-1, 0}] & /@ assoc["Crossings"], {}],
+    If[MemberQ[labelSet, "Faces"] && KeyExistsQ[assoc, "Faces"],
+     labelRec[#["Id"], faceLabelPos[#, w, h, interiorPolys], {1, 0}, {2, 1}] & /@
+      assoc["Faces"], {}]];
+
+  (* plot range: the full subgrid footprint -- bounding box + u/2 on every side
+     (spec 3.6) -- stretched to cover any label box that leaves it (only the
+     exterior face label can, via spec 7.3's extension column) *)
+  lows = Prepend[(#Pos - (1 + #Off) #Box/2) & /@ labels, {-1/2, -1/2}];
+  highs = Prepend[(#Pos + (1 - #Off) #Box/2) & /@ labels, $gridSize {w, h} + 1/2];
+  <|"Fills" -> fills, "Strands" -> strands, "Labels" -> labels,
+   "PlotRange" -> Transpose[{Min /@ Transpose[lows], Max /@ Transpose[highs]}],
+   "Legend" -> comps|>
 ];
 
-totalComponentCount[geos_List] := Total[If[KeyExistsQ[#, "Unknot"], 1, geoComponentCount[#]] & /@ geos];
+(* A bare "<|"Unknot"->True|>" marker (knoodledraw's stand-in for a 0-crossing
+   summand -- see the C++-side comment on DrawKnot) draws as the boundary of
+   one drawing cell with the standard u/2 rounded bends -- the same orthogonal
+   drawing language as every other summand, not a foreign circle (spec 9.4).
+   The loop starts and ends mid-edge so all four corners are interior vertices
+   of the polyline and get rounded; the two ends butt-join seamlessly on the
+   straight run. It carries no arcs, crossings, or faces -- hence no labels
+   and no arrowheads -- but participates in the common scale. A colored marker
+   (<|"Unknot"->True,"Color"->k|>) joins wire class k; a colorless one gets
+   the ord-th fresh palette slot after the wire classes (or the plain
+   compOffset slot in fallback mode). *)
+unknotContent[assoc_, compOffset_, idx_, ord_] := Module[{slot, label},
+  {slot, label} = Which[
+    idx === None, {compOffset + 1, compOffset},
+    KeyExistsQ[assoc, "Color"], {idx[assoc["Color"]], assoc["Color"]},
+    True, With[{s = Length[idx] + ord}, {s, s - 1}]];
+  <|"Fills" -> {},
+   "Strands" -> {{ColorData[97][slot],
+      Line[roundedPolyline[$gridSize {{1/2, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}, {1/2, 0}}, 1/2]]}},
+   "Labels" -> {}, "PlotRange" -> {{-1/2, $gridSize + 1/2}, {-1/2, $gridSize + 1/2}},
+   "Legend" -> {{label}, {ColorData[97][slot]}}|>];
 
-(* Full rendered width in coordinate units: the summands side by side plus the
-   inter-summand gaps (mirroring layoutGeos's accumulation), plus the
-   PlotRangePadding fraction on each side. *)
-$rangePad = 0.07;
-layoutWidth[geos_List] :=
-  (Total[geoWidth /@ geos] + $summandGap $gridSize (Length[geos] - 1)) (1 + 2 $rangePad);
-
-(* "Thickness" -> Automatic draws strands $strandWidth coordinate units wide, so
-   the stroke scales with the diagram and the baked-in under-strand breaks stay
-   visible no matter how many grid squares are squeezed into the image -- but
-   never thicker than 7 pt, which keeps small diagrams looking exactly as they
-   did when 7 pt was the fixed default. The cap is computed against the
-   requested ImageSize width (its default, 340, doubles as the fallback for
-   non-numeric ImageSize specs). An explicit number keeps the old fixed
-   behavior: that many printer's points regardless of scale. Anything else is
-   passed through as a Graphics directive (e.g. Thickness[0.02]). *)
+(* ---- stroke width (spec 3.1): at most u/3 at the common scale -- mandatory,
+   so strokes never reach a cell's interior 3x3 block and the crossing-gap
+   clearance survives any rescaling -- and additionally never more than 7 pt
+   absolute (the old default's cap, kept so small diagrams keep their familiar
+   weight). An explicit numeric "Thickness" (printer's points) is clamped to
+   the same u/3 bound; any other directive passes through unclamped (escape
+   hatch, at the user's own risk). s is the points-per-subgrid-unit scale. *)
 imageWidthPt[img_] := Which[
    NumericQ[img], img,
    MatchQ[img, {_?NumericQ, _}], First[img],
    True, 340.];
-resolveThickness[Automatic, geos_, img_] :=
-  AbsoluteThickness[Min[7., $strandWidth imageWidthPt[img]/layoutWidth[geos]]];
-resolveThickness[t_?NumericQ, _, _] := AbsoluteThickness[t];
-resolveThickness[t_, _, _] := t;
+resolveThickness[Automatic, s_] := AbsoluteThickness[Min[7., s/3]];
+resolveThickness[t_?NumericQ, s_] := AbsoluteThickness[Min[t, s/3]];
+resolveThickness[t_, _] := t;
 
-(* Orientation arrowhead length as an Arrowheads fraction of the graphic width:
-   $arrowLengthFactor times the resolved stroke width, so heads track the
-   scale-aware thickness exactly (proportional on dense diagrams, capped with
-   the 7 pt stroke cap on small ones). For a non-AbsoluteThickness "Thickness"
-   directive there is no pt width to scale from; fall back to the same
-   proportional size Automatic thickness would give. *)
-arrowFraction[AbsoluteThickness[p_], _, img_] := $arrowLengthFactor p/imageWidthPt[img];
-arrowFraction[_, geos_, _] := $arrowLengthFactor $strandWidth/layoutWidth[geos];
-
-(* legendQ draws a LineLegend matching each component's strand color to its
-   (global, 0-based) component number -- the same numbering layoutGeos assigns
-   colors by, running across every summand, not restarting per summand. *)
-render[geos_List, thick_, img_, radiusFrac_, checkerboardQ_, labelSet_, legendQ_, orient_] := Module[
-  {thickD = resolveThickness[thick, geos, img], g, n},
+(* ---- assemble one summand's Graphics at the common scale s (points per
+   subgrid unit). Explicit PlotRange with no range/image padding, so s is
+   exact: ImageSize = s * (plot-range width) -- every margin the drawing
+   needs is already inside the plot range (spec 3.6). legendQ attaches a
+   LineLegend of this drawing's own (global, 0-based) component numbers. *)
+summandGraphics[content_, s_, thickD_, dirs_, fontSize_, legendQ_] := Module[{g},
   g = Graphics[
-     layoutGeos[geos, thickD, radiusFrac, checkerboardQ, labelSet, orient,
-      arrowFraction[thickD, geos, img]],
-     AspectRatio -> Automatic, ImageSize -> img, PlotRangePadding -> Scaled[$rangePad]];
+    {content["Fills"],
+     {CapForm["Butt"], JoinForm["Round"], thickD, content["Strands"]},
+     Table[Text[Style[l["Text"], Sequence @@ dirs, FontSize -> fontSize],
+        l["Pos"], l["Off"], l["Dir"]], {l, content["Labels"]}]},
+    PlotRange -> content["PlotRange"], PlotRangePadding -> None, ImagePadding -> None,
+    AspectRatio -> Automatic,
+    ImageSize -> s (content["PlotRange"][[1, 2]] - content["PlotRange"][[1, 1]])];
   If[TrueQ[legendQ],
-   n = totalComponentCount[geos];
-   Legended[g, LineLegend[ColorData[97] /@ Range[n], Range[0, n - 1]]],
+   Legended[g, LineLegend[content["Legend"][[2]], content["Legend"][[1]]]],
    g]
+];
+
+(* ---- render: resolve the two global quantities and build one Graphics per
+   summand (spec 8-9). The common scale s comes from ImageSize -- applied to
+   the widest drawing, every other drawing proportionally smaller -- unless
+   LabelStyle requests a FontSize and no explicit ImageSize is given, in which
+   case the requested size is honored and sets s instead (spec 8.5 run in
+   reverse); when both are given, ImageSize wins. The label font size is the
+   largest at which every arc label fits its 1x1 subgrid box and every
+   crossing/face label its 2x1 box, measured once per distinct label text
+   under the fully resolved style, uniformly across ALL summands (spec 8.2-3).
+   Multi-summand output is a List of Graphics -- never a GraphicsGrid, which
+   would renormalize the cells and break the common scale (spec 9.3). *)
+render[geos_List, thick_, img_, imageGivenQ_, checkerboardQ_, labelSet_, legendQ_, orientQ_, labelStyleOpt_] :=
+ Module[{idx, contents, dirs, labels, extents, fitK, ufs, s, fontSize, thickD, drawings},
+  idx = wireColorIndex[geos];
+  contents = MapThread[summandContent[#1, checkerboardQ, labelSet, orientQ, #2, idx, #3] &,
+    {geos, Most[FoldList[Plus, 0, geoComponentCount /@ geos]],
+     Most[FoldList[Plus, 1, Boole[KeyExistsQ[#, "Unknot"] && ! KeyExistsQ[#, "Color"]] & /@ geos]]}];
+  dirs = resolveLabelStyle[labelStyleOpt];
+  labels = Join @@ (#["Labels"] & /@ contents);
+  extents = AssociationMap[labelExtent[#, dirs] &, DeleteDuplicates[#Text & /@ labels]];
+  fitK = If[labels === {}, None, Min[fitCoeff[extents[#Text], #Box] & /@ labels]];
+  ufs = userFontSize[dirs];
+  s = If[fitK =!= None && ufs =!= None && ! imageGivenQ,
+    ufs/($fitFraction fitK),
+    imageWidthPt[img]/Max[(#["PlotRange"][[1, 2]] - #["PlotRange"][[1, 1]]) & /@ contents]];
+  fontSize = Which[
+    fitK === None, None,
+    ufs =!= None && ! imageGivenQ, ufs,
+    True, $fitFraction fitK s];
+  thickD = resolveThickness[thick, s];
+  drawings = summandGraphics[#, s, thickD, dirs, fontSize, legendQ] & /@ contents;
+  If[Length[drawings] == 1, First[drawings], drawings]
 ];
 
 (* ---- public entry point ---- *)
@@ -577,34 +703,46 @@ KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
 KnoodleDraw::failed =
   "knoodledraw produced no geometry for this input (degenerate or self-intersecting \
 geometry, or an invalid diagram).";
-(* "CornerRadius": corner arc radius as a fraction of one grid square, in [0, 1/2]
-   (0 = sharp corners). "Checkerboard": shade the two-colorable faces. "Labels": a
-   subset of {"Crossings","Arcs","Faces"} (a single string is also accepted).
-   "ExteriorFace": which face OrthoDraw lays out as the unbounded exterior region
-   (a non-negative integer, 0-based; Automatic, the default, is OrthoDraw's own
-   default -- the largest face by arc count). Applies uniformly to every summand
-   of a multi-summand diagram. PlotLegends -> Automatic adds a legend matching
-   each link component's color to its (global) component number.
+(* "Checkerboard": shade the two-colorable faces. "Labels": a subset of
+   {"Crossings","Arcs","Faces"} (a single string is also accepted). Crossing
+   and face labels sit in their host cell's reserved region; arc labels are
+   inline -- the strand is cut for one subgrid unit at every traversed edge's
+   midpoint and the label sits in the gap, so an arc spanning k edges shows
+   its label k times (a debugging view of the PD code, not a presentation
+   default). LabelStyle: text styling only (family, weight, color, ...),
+   merged over the pinned default font (Source Sans Pro); a numeric FontSize
+   is honored -- and sets the drawing scale -- only when no explicit
+   ImageSize is given, otherwise the largest-fit rule sizes the text.
+   "ExteriorFace": which face OrthoDraw lays out as the unbounded exterior
+   region (a non-negative integer, 0-based; Automatic, the default, is
+   OrthoDraw's own default -- the largest face by arc count). Applies
+   uniformly to every summand of a multi-summand diagram. PlotLegends ->
+   Automatic adds a legend matching each link component's strand color to
+   its component number (attached per drawing on multi-summand output).
+   With current knoodledraw binaries the numbers are the input's own wire
+   colors -- the physical link components, shared across all summands, so
+   a knot's connect-sum factors all draw in one color; with older binaries
+   the legend falls back to per-summand component runs.
    "RandomizeProjection" (True by default): apply a random shear before
    projecting 3D geometry to a diagram. The default projection is straight
    down the z axis, which can degenerate on vertical/coplanar segments,
    so this defaults on; set to False to get the plain z-axis projection
    (e.g. for reproducibility). Only meaningful for 3D input read from stdin
    (KnotData/space-curve/point-list inputs); a no-op otherwise.
-   "Thickness": Automatic (default) scales the strand width with the diagram so
-   crossing gaps stay visible on dense diagrams (see resolveThickness); a number
-   is a fixed AbsoluteThickness in printer's points; any other directive is
-   used as-is.
-   "Orientation": False (default) draws unoriented strands; True marks the
-   knot's orientation with one arrowhead per link component (on the
-   component's longest arc); All puts an arrowhead on every arc. Heads sit at
-   the middle of an arc's longest straight run (never at a crossing gap or on
-   a rounded corner) and are sized to the stroke weight; unknot-marker
-   summands carry no arc data, so they draw without an arrowhead. *)
-Options[KnoodleDraw] = {"Simplify" -> Automatic, "CornerRadius" -> 1/3, "LayoutOptions" -> {},
-   "Checkerboard" -> False, "Labels" -> {}, "ExteriorFace" -> Automatic, PlotLegends -> None,
-   "RandomizeProjection" -> True, ImageSize -> 340, "Thickness" -> Automatic,
-   "Orientation" -> False};
+   "Thickness": Automatic (default) draws strands u/3 wide (capped at 7 pt);
+   a number is an AbsoluteThickness in printer's points, clamped to the same
+   u/3 bound; any other directive is used as-is.
+   "Orientation": False (default) draws unoriented strands; True puts an
+   arrowhead in every traversed arrowhead square -- two per drawing edge
+   (spec 4.1; All is accepted as a synonym for True). Unknot-marker summands
+   carry no arc data, so they draw without arrowheads.
+   ImageSize: applies to the widest drawing of the output; on multi-summand
+   output every other drawing gets a proportionally smaller ImageSize at the
+   common scale (spec 9). *)
+Options[KnoodleDraw] = {"Simplify" -> Automatic, "LayoutOptions" -> {},
+   "Checkerboard" -> False, "Labels" -> {}, LabelStyle -> {}, "ExteriorFace" -> Automatic,
+   PlotLegends -> None, "RandomizeProjection" -> True, ImageSize -> 340,
+   "Thickness" -> Automatic, "Orientation" -> False};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet, extFlag},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
@@ -616,9 +754,10 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, ge
     TrueQ[OptionValue["RandomizeProjection"]]];
   If[geos === {}, Message[KnoodleDraw::failed]; Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
-  render[geos, OptionValue["Thickness"], OptionValue[ImageSize], OptionValue["CornerRadius"],
+  render[geos, OptionValue["Thickness"], OptionValue[ImageSize],
+    FilterRules[Flatten[{opts}], ImageSize] =!= {},
     OptionValue["Checkerboard"], labelSet, OptionValue[PlotLegends] =!= None,
-    OptionValue["Orientation"]]
+    MatchQ[OptionValue["Orientation"], True | All], OptionValue[LabelStyle]]
 ];
 
 KnoodleSimplify::badinput = "`1` is not a recognized knot/link input.";
@@ -626,23 +765,42 @@ KnoodleSimplify::failed =
   "knoodlesimplify produced no result for this input (degenerate or self-intersecting \
 geometry, or an invalid diagram).";
 (* "SimplifyLevel": knoodlesimplify's --simplify-level (Automatic = its own
-   default). "RandomizeProjection": as in KnoodleDraw, applies only to 3D
+   default, 6). The scale (rewired upstream at Knoodle 34ba537; levels 1-3
+   were silent no-ops before): 0 = none (PD passthrough); 1-3 = local-only
+   diagnostic tiers (1 Reidemeister I, 2 R I+II, 3 all local moves incl.
+   assisted R1a/R2a) with no rerouting; 4 = path rerouting; 5 = + summand
+   detection; 6+ = full Reapr. Note 3 -> 4 is not a superset: level 4 drops
+   the local pass (upstream tuning: it doesn't help once rerouting engages).
+   "RandomizeProjection": as in KnoodleDraw, applies only to 3D
    input read from stdin. "Unite": False (default) is knoodlesimplify's own
    --split (one diagram per prime factor); True is --unite (connect-sums
    same-colored factors into one diagram per split component -- see
    KnoodleSimplify::usage). "SimplifyOptions": arbitrary knoodlesimplify
-   flags, same passthrough convention as KnoodleDraw's "LayoutOptions". *)
+   flags, same passthrough convention as KnoodleDraw's "LayoutOptions".
+   "OutputFormat": "PlanarDiagramComplex" (default) wraps the full complex;
+   "KnotTheory" returns KnotTheory` PD codes instead -- one PD[X[...], ...]
+   per physically split portion of the link (a bare PD when there is only
+   one, a list otherwise; a 0-crossing portion is PD[Loop[1]]) -- ready for
+   KnotTheory invariant computations. PD output implies "Unite" -> True:
+   the format cannot express that separate diagrams share a link component
+   (the complex's cross-summand colors), so same-colored connect-sum
+   factors are spliced back together first. *)
 Options[KnoodleSimplify] = {"SimplifyLevel" -> Automatic, "RandomizeProjection" -> True,
-   "Unite" -> False, "SimplifyOptions" -> {}};
+   "Unite" -> False, "SimplifyOptions" -> {}, "OutputFormat" -> "PlanarDiagramComplex"};
+KnoodleSimplify::badformat = "`1` is not a recognized \"OutputFormat\" \
+(\"PlanarDiagramComplex\" or \"KnotTheory\").";
 KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
-  {norm, tsv, levelFlag, randFlag, uniteFlag, extraFlags, serialized},
+  {norm, tsv, fmt, levelFlag, randFlag, uniteFlag, extraFlags, serialized, pds},
   norm = toTSV[input];
   If[norm === $Failed, Message[KnoodleSimplify::badinput, input]; Return[$Failed]];
   tsv = First[norm];
+  fmt = Replace[OptionValue["OutputFormat"], Automatic -> "PlanarDiagramComplex"];
+  If[! MemberQ[{"PlanarDiagramComplex", "KnotTheory"}, fmt],
+   Message[KnoodleSimplify::badformat, fmt]; Return[$Failed]];
   levelFlag = Replace[OptionValue["SimplifyLevel"],
      {Automatic -> {}, n_Integer :> {"--simplify-level=" <> ToString[n]}}];
   randFlag = If[TrueQ[OptionValue["RandomizeProjection"]], {"--randomize-projection"}, {}];
-  uniteFlag = If[TrueQ[OptionValue["Unite"]], {"--unite"}, {}];
+  uniteFlag = If[TrueQ[OptionValue["Unite"]] || fmt === "KnotTheory", {"--unite"}, {}];
   extraFlags = toCliFlags[OptionValue["SimplifyOptions"]];
   serialized = runSimplifyPdc[tsv, Join[levelFlag, randFlag, uniteFlag, extraFlags]];
   (* Empty output means the tool bailed (degenerate/self-intersecting
@@ -650,7 +808,11 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
      empty complex. A genuine unknot is NOT empty ("u <color>" line). *)
   If[! StringQ[serialized] || StringTrim[serialized] === "",
    Message[KnoodleSimplify::failed]; Return[$Failed]];
-  PlanarDiagramComplex[<|"serialized" -> serialized|>]
+  If[fmt === "KnotTheory",
+   pds = toKnotTheoryPD /@ Join @@ Map[
+      If[# === "Unknot", {"Unknot"}, splitPieces[#]] &, pdcPortions[serialized]];
+   If[Length[pds] == 1, First[pds], pds],
+   PlanarDiagramComplex[<|"serialized" -> serialized|>]]
 ];
 
 (* ---- run knoodleidentify, returning the raw stdout association-text line.
