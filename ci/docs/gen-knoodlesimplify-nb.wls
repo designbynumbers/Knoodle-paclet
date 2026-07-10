@@ -77,6 +77,16 @@ same-colored factors into one diagram per split component"],
       optRow[ToBoxes["RandomizeProjection"], "True",
        "randomly rotate 3D input before projecting, avoiding degenerate \
 projections; set False for reproducibility"],
+      optRow[ToBoxes["MaxReaprAttempts"], "Automatic",
+       "maximum number of Reapr iterations; Automatic is the tool's default \
+of 25. Reapr runs only at \"SimplifyLevel\" 6 and up, so this has no effect \
+at lower levels"],
+      optRow[ToBoxes["Compaction"], "True",
+       "whether the Reapr layout runs OrthoDraw's compaction pass; False \
+skips it (Reapr only)"],
+      optRow[ToBoxes["ReaprEnergy"], "Automatic",
+       "energy functional Reapr minimizes: Automatic (the tool's default), \
+or one of \"TV\", \"Height\", \"TV_MCF\" (Reapr only)"],
       optRow[ToBoxes["SimplifyOptions"], RowBox[{"{", "}"}],
        "extra knoodlesimplify flags, e.g. {\"dijkstra-strategy\" -> \
 \"alternating\"}; see knoodlesimplify --help"],

@@ -32,7 +32,10 @@ controls the output shape for composite/split links: False gives one diagram per
 diagrammatically-prime factor (same-colored factors share a link component -- the natural \
 input for KnoodleIdentify on a composite knot); True connect-sums same-colored factors back \
 together via PlanarDiagramComplex::Connect, giving one diagram per physically split component \
-(the natural single-PD-per-component form for KnotTheory/Regina). \"SimplifyOptions\" ({}) \
+(the natural single-PD-per-component form for KnotTheory/Regina). \"MaxReaprAttempts\" \
+(Automatic, the tool's default of 25), \"Compaction\" (True), and \"ReaprEnergy\" (Automatic; \
+one of \"TV\", \"Height\", \"TV_MCF\") tune the Reapr layout engine, which only runs at \
+simplify levels 6+, so they have no effect at lower levels. \"SimplifyOptions\" ({}) \
 forwards arbitrary knoodlesimplify flags controlling PlanarDiagramComplex::Simplify's \
 algorithm (e.g. {\"dijkstra-strategy\"->\"alternating\", \"canonicalize\"->False} -- see \
 knoodlesimplify --help for the full list), the same passthrough convention as \
@@ -775,7 +778,15 @@ geometry, or an invalid diagram).";
    input read from stdin. "Unite": False (default) is knoodlesimplify's own
    --split (one diagram per prime factor); True is --unite (connect-sums
    same-colored factors into one diagram per split component -- see
-   KnoodleSimplify::usage). "SimplifyOptions": arbitrary knoodlesimplify
+   KnoodleSimplify::usage). "MaxReaprAttempts", "Compaction", and
+   "ReaprEnergy" tune the Reapr layout engine, which only runs at simplify
+   levels 6+ (the Automatic default), so they are no-ops at lower levels.
+   "MaxReaprAttempts": Automatic (= the tool's own default of 25) or a
+   positive integer cap on Reapr iterations (--max-reapr-attempts).
+   "Compaction": True (default) runs OrthoDraw's compaction pass; False
+   emits --no-compaction to skip it. "ReaprEnergy": Automatic (the tool's
+   default) or one of "TV", "Height", "TV_MCF" -- Reapr's energy functional
+   (--reapr-energy). "SimplifyOptions": arbitrary knoodlesimplify
    flags, same passthrough convention as KnoodleDraw's "LayoutOptions".
    "OutputFormat": "PlanarDiagramComplex" (default) wraps the full complex;
    "KnotTheory" returns KnotTheory` PD codes instead -- one PD[X[...], ...]
@@ -786,23 +797,36 @@ geometry, or an invalid diagram).";
    (the complex's cross-summand colors), so same-colored connect-sum
    factors are spliced back together first. *)
 Options[KnoodleSimplify] = {"SimplifyLevel" -> Automatic, "RandomizeProjection" -> True,
-   "Unite" -> False, "SimplifyOptions" -> {}, "OutputFormat" -> "PlanarDiagramComplex"};
+   "Unite" -> False, "MaxReaprAttempts" -> Automatic, "Compaction" -> True,
+   "ReaprEnergy" -> Automatic, "SimplifyOptions" -> {},
+   "OutputFormat" -> "PlanarDiagramComplex"};
 KnoodleSimplify::badformat = "`1` is not a recognized \"OutputFormat\" \
 (\"PlanarDiagramComplex\" or \"KnotTheory\").";
+KnoodleSimplify::badenergy = "`1` is not a recognized \"ReaprEnergy\" \
+(\"TV\", \"Height\", or \"TV_MCF\").";
 KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
-  {norm, tsv, fmt, levelFlag, randFlag, uniteFlag, extraFlags, serialized, pds},
+  {norm, tsv, fmt, levelFlag, randFlag, uniteFlag, maxReaprFlag, compactionFlag,
+   energy, energyFlag, extraFlags, serialized, pds},
   norm = toTSV[input];
   If[norm === $Failed, Message[KnoodleSimplify::badinput, input]; Return[$Failed]];
   tsv = First[norm];
   fmt = Replace[OptionValue["OutputFormat"], Automatic -> "PlanarDiagramComplex"];
   If[! MemberQ[{"PlanarDiagramComplex", "KnotTheory"}, fmt],
    Message[KnoodleSimplify::badformat, fmt]; Return[$Failed]];
+  energy = OptionValue["ReaprEnergy"];
+  If[energy =!= Automatic && ! MemberQ[{"TV", "Height", "TV_MCF"}, energy],
+   Message[KnoodleSimplify::badenergy, energy]; Return[$Failed]];
   levelFlag = Replace[OptionValue["SimplifyLevel"],
      {Automatic -> {}, n_Integer :> {"--simplify-level=" <> ToString[n]}}];
   randFlag = If[TrueQ[OptionValue["RandomizeProjection"]], {"--randomize-projection"}, {}];
   uniteFlag = If[TrueQ[OptionValue["Unite"]] || fmt === "KnotTheory", {"--unite"}, {}];
+  maxReaprFlag = Replace[OptionValue["MaxReaprAttempts"],
+     {Automatic -> {}, n_Integer?Positive :> {"--max-reapr-attempts=" <> ToString[n]}}];
+  compactionFlag = If[TrueQ[OptionValue["Compaction"]], {}, {"--no-compaction"}];
+  energyFlag = Replace[energy, {Automatic -> {}, e_ :> {"--reapr-energy=" <> ToString[e]}}];
   extraFlags = toCliFlags[OptionValue["SimplifyOptions"]];
-  serialized = runSimplifyPdc[tsv, Join[levelFlag, randFlag, uniteFlag, extraFlags]];
+  serialized = runSimplifyPdc[tsv,
+    Join[levelFlag, randFlag, uniteFlag, maxReaprFlag, compactionFlag, energyFlag, extraFlags]];
   (* Empty output means the tool bailed (degenerate/self-intersecting
      geometry, invalid diagram): say so rather than returning a quietly
      empty complex. A genuine unknot is NOT empty ("u <color>" line). *)

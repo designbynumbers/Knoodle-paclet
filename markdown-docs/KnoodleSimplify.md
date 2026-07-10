@@ -109,6 +109,9 @@ Not observed in practice yet, just a known structural risk.
 | `"SimplifyLevel"` | `Automatic` | Maps to `knoodlesimplify`'s `--simplify-level`. `Automatic` = the tool's own default (full Reapr pipeline, level 6). The scale (rewired upstream at Knoodle `34ba537`, 2026-07-04 — levels 1–3 were silent no-ops before; see `~/Knoodle/handoff/knoodlesimplify-simplify-levels-rewired/`): `0` no simplification (PD passthrough); `1`–`3` **local-only diagnostic tiers**, no rerouting (`1` Reidemeister I only, `2` R I+II, `3` all local moves incl. assisted R1a/R2a) — for display and for benchmarking other simplifiers, *not* for hard diagrams; `4` path rerouting; `5` +summand/connect-sum detection; `6`+ full Reapr (randomized 3D embedding + compaction). The 3→4 boundary is deliberately **not** a superset: level 4 drops the local pass (upstream tuning found it doesn't help once rerouting engages), so per-level crossing counts need not be monotone between 3 and 4. The reference page demonstrates the tiers on the 128-crossing raw projection of a Gaussian random 100-gon (`SeedRandom[5]`, `"RandomizeProjection" -> False`): 128 → 119 (R1) → 45 (R1+R2) → 18 (all local) → 6 (full pipeline; `KnoodleIdentify` names it 6_2), with Haken's Gordian unknot as the counterpoint that stays at 141 crossings at every level below full. |
 | `"RandomizeProjection"` | `True` | Same semantics as `KnoodleDraw`'s option of the same name — see there. |
 | `"Unite"` | `False` | **The most important option for composite/split links.** `False` (default) matches `knoodlesimplify`'s own `--split` output shape: one diagram per diagrammatically-prime connect-sum factor, with same-colored factors belonging to the same original link component (colors are globally persistent/traceable across the whole complex — confirmed by reading `Split.hpp`, never renumbered per-summand). This is the natural input shape for `KnoodleIdentify` on a composite knot (e.g. the granny knot round-trips as *two separate* `KnotSymbol[3,1,...]` summands in this shape, with multiplicity 2 once identified). `True` uses `--unite`, which connect-sums same-colored factors *back together* via genuine arc splicing, giving one diagram per physically split link component — the natural single-PD-code-per-component form for exporting to KnotTheory or Regina. See the dedicated section below — getting this option's C++ implementation right took two attempts. |
+| `"MaxReaprAttempts"` | `Automatic` | Maps to `knoodlesimplify`'s `--max-reapr-attempts=K`, the maximum number of Reapr iterations. `Automatic` = the tool's own default of 25; a positive integer overrides it. **Reapr only** — Reapr runs solely at `"SimplifyLevel"` 6+ (the `Automatic` default), so this is a no-op at lower levels. |
+| `"Compaction"` | `True` | `False` emits `--no-compaction`, skipping OrthoDraw's compaction pass. **Reapr only** (same level caveat as above). |
+| `"ReaprEnergy"` | `Automatic` | Maps to `knoodlesimplify`'s `--reapr-energy=E`, the energy functional Reapr minimizes. `Automatic` = the tool's default; otherwise one of `"TV"`, `"Height"`, `"TV_MCF"` (the three energies the paclet's bundled binaries expose — see the passthrough note below on `KNOODLE_USE_UMFPACK`/`KNOODLE_USE_CLP`-gated energies). An unrecognized value gives a `KnoodleSimplify::badenergy` message and `$Failed`. **Reapr only** (same level caveat as above). |
 | `"SimplifyOptions"` | `{}` | Forwards arbitrary `knoodlesimplify` flags, same passthrough convention as `KnoodleDraw`'s `"LayoutOptions"` (`"name"->value` → `--name=value`; `"name"->True`/`False` → `--name`/`--no-name`). This is how to reach the full `PlanarDiagramComplex::Simplify_Args_T` surface (see table below) beyond the coarse `"SimplifyLevel"` preset. |
 | `"OutputFormat"` | `"PlanarDiagramComplex"` | `"KnotTheory"` returns KnotTheory\` PD codes instead of a `PlanarDiagramComplex` — one `PD[X[...], ...]` per **physically split portion** of the link (a bare `PD` when there is only one, a list otherwise; a 0-crossing portion is KnotTheory's `PD[Loop[1]]`) — ready for KnotTheory invariant computations (`Jones[pd][q]` etc.). Implies `"Unite" -> True`: PD codes cannot express that separate diagrams share a link component (the complex's cross-summand colors), so same-colored connect-sum factors are spliced together first. Implementation is **WL-side** (the CLI still emits the full PDC, so nothing is lost internally): the `PD`/`X`/`Loop` heads are created in the KnotTheory\` context *without* loading the package (a later ``Needs["KnotTheory`"]`` binds the same symbols), arcs are 1-based per KnotTheory's convention, and — because the CLI's `--unite` merges physically split components into one `s` block with disjoint arc ranges (verified 2026-07-04) — split portions are recovered WL-side as connected components of the crossings-sharing-arcs graph, each rank-renumbered to a self-contained code. |
 
@@ -138,14 +141,19 @@ all go through `"SimplifyOptions"`.
 | `"compaction-method"` | `compaction_method` | `"unknown"`, `"topological-numbering"`, `"topological-ordering"`, `"length-mcf"` (default), `"length-clp"`, `"area-length-clp"` |
 | `"canonicalize"` | `canonicalizeQ` | bool |
 
-Also pre-existing, not part of `Simplify_Args_T`, but reachable the same
-way: `"max-reapr-attempts"` (integer, default 25) and `"reapr-energy"`
-(`"tv"`, `"dirichlet"`, `"bending"`, `"height"`, `"tv_clp"`, `"tv_mcf"` —
-note `dirichlet`/`bending` need a `KNOODLE_USE_UMFPACK` build and
-`tv_clp`/`length-clp`/`area-length-clp` need `KNOODLE_USE_CLP`; neither is
-currently compiled into the paclet's bundled binaries, confirmed via
-`knoodlesimplify --help`, which lists only `TV, Height, TV_MCF` as
-available).
+Also part of the Reapr "above the line" surface, and now each has a
+**dedicated named option** (see the Options table above): `--max-reapr-attempts`
+→ `"MaxReaprAttempts"`, `--no-compaction` → `"Compaction" -> False`, and
+`--reapr-energy` → `"ReaprEnergy"`. They remain reachable through
+`"SimplifyOptions"` too (`"max-reapr-attempts"`, `"compaction"`,
+`"reapr-energy"`), but the named options are the documented path. The full
+set of energies the *source* recognizes is `"tv"`, `"dirichlet"`,
+`"bending"`, `"height"`, `"tv_clp"`, `"tv_mcf"` — but `dirichlet`/`bending`
+need a `KNOODLE_USE_UMFPACK` build and `tv_clp`/`length-clp`/`area-length-clp`
+need `KNOODLE_USE_CLP`; neither is currently compiled into the paclet's
+bundled binaries, confirmed via `knoodlesimplify --help`, which lists only
+`TV, Height, TV_MCF` as available — hence `"ReaprEnergy"` validates against
+exactly those three.
 
 **Deliberately not exposed, anywhere**: `splitQ` (the `Simplify_Args_T`
 field, distinct from the `"Unite"` option above despite similar naming).
