@@ -102,8 +102,8 @@ Cell[TextData[{
 Cell["About Knoodle", "GuideReferenceSection",ExpressionUUID->"a1b2c3d4-0001-4a01-9c01-0000000000a1"],
 
 Cell["\<\
-This version of the Knoodle paclet (0.9.1) packages version (1.0.4) of the \
-Knoodle library. Paclet 0.9.1 is a prerelease for community feedback before \
+This version of the Knoodle paclet (0.9.2) packages version (1.0.6) of the \
+Knoodle library. Paclet 0.9.2 is a prerelease for community feedback before \
 1.0.0 is finalized.\
 \>", "GuideText",ExpressionUUID->"a1b2c3d4-0001-4a01-9c01-0000000000a0"],
 
