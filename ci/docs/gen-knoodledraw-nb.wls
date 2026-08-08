@@ -97,6 +97,15 @@ drawing gets the requested ImageSize and the others are proportionally \
 smaller, so strands, gaps, arrowheads, and label text are the same physical \
 size across the whole output. Unrecognized input yields $Failed with a \
 KnoodleDraw::badinput message."],
+   notes["\"DrawingDimension\" -> 3 returns a Graphics3D instead: a 3D \
+embedding of the same link, drawn as one tube per link component, in the same \
+colors the diagram gives its strands. The embedded curves have precisely the \
+link type of the input diagram -- connect-summed factors are rejoined into one \
+closed curve, split components are left unlinked -- but the embedding is \
+randomized, so repeated calls give different curves, with different numbers \
+of vertices, of the same link. The diagram options (\"Checkerboard\", \
+\"Labels\", LabelStyle, \"ExteriorFace\", \"Orientation\") do not apply to \
+it; \"Thickness\" is then a tube radius in the embedding's own coordinates."],
    notes["Labels are set in Source Sans Pro at the largest size at which \
 every label fits its allotted space, uniformly across all diagrams of the \
 output. LabelStyle styles the label text (family, weight, color, \
@@ -138,6 +147,9 @@ projections; set False for reproducibility"],
       optRow[ToBoxes["LayoutOptions"], RowBox[{"{", "}"}],
        "extra knoodledraw layout flags, e.g. {\"randomize-bends\" -> 3}; see \
 knoodledraw --help"],
+      optRow[ToBoxes["DrawingDimension"], "2",
+       "2 draws the planar diagram; 3 returns a Graphics3D of a 3D embedding \
+of the same link -- one tube per link component"],
       optRow["ImageSize", "340",
        "size of the resulting Graphics; with several diagrams, the size of \
 the widest (the rest are proportionally smaller, at a common scale)"]
@@ -237,6 +249,59 @@ strand it is tied into:"],
 two-component diagram, in the same component colors:"],
    group[HoldForm[KnoodleDraw[KnoodleSimplify[{trefC, hopfC}, "Unite" -> True],
       PlotLegends -> Automatic, ImageSize -> 220]]]};
+
+(* ---- 3D embedding output ---- *)
+ex8c = {
+   delim,
+   text["\"DrawingDimension\" -> 3 goes the other way: instead of a diagram it \
+returns a Graphics3D of a 3D embedding of the same link, one tube per link \
+component. Here the knot 8_2 and the Hopf link of the previous example, \
+whose two components keep the colors the diagram gave them:"],
+   (* No SeedRandom here, deliberately: the embedding's randomness lives in the
+      knoodledraw process, not in the WL kernel, so SeedRandom cannot pin it and
+      writing one would only imply a reproducibility that does not exist. Every
+      regeneration of this notebook therefore draws different -- equally valid --
+      curves. *)
+   group[HoldForm[Row[{KnoodleDraw[Knot[8, 2], "DrawingDimension" -> 3, ImageSize -> 230],
+       KnoodleDraw[{c1, c2}, "DrawingDimension" -> 3, PlotLegends -> Automatic,
+        ImageSize -> 230]}, Spacer[20]]]]};
+
+ex8d = {
+   delim,
+   text["The embedded curves have precisely the link type of the input \
+diagram, so they can be fed straight back into the pipeline -- here \
+KnoodleIdentify recovers 8_2 from the points of its own embedding. The \
+embedding is randomized, though, so the curve (and even its number of \
+vertices) differs from run to run:"],
+   silent[HoldForm[
+     curve = Cases[KnoodleDraw[Knot[8, 2], "DrawingDimension" -> 3],
+        Tube[p_, _] :> Most[p], Infinity][[1]];]],
+   group[HoldForm[KnoodleIdentify[curve]]]};
+
+(* ---- the embedding as topology-preserving geometric repair ---- *)
+ex8e = {
+   delim,
+   text["Because the embedded curve has exactly the input's knot type, \
+\"DrawingDimension\" -> 3 doubles as a way to repair bad geometry. A random \
+50-gon in the unit ball is about as bad as a closed polygon gets: its longest \
+edge is 19 times its shortest, and non-adjacent edges pass within a seventh \
+of that shortest edge of each other. Nothing about its knot type is visible:"],
+   silent[HoldForm[SeedRandom[933]; K = RandomPoint[Ball[], 50];]],
+   group[HoldForm[Graphics3D[Tube[Append[K, First[K]], 0.015], Boxed -> False,
+      ImageSize -> 260]]],
+   text["Drawing the same points in dimension 3 replaces them with a curve of \
+precisely the same knot type, laid out on Reapr's grid: about 20 vertices \
+instead of 50, every edge a whole number of grid pitches, and non-adjacent \
+strands a full pitch apart. It is a trefoil, and now it looks like one:"],
+   group[HoldForm[KnoodleDraw[K, "DrawingDimension" -> 3, ImageSize -> 260]]],
+   text["The two really are the same knot: the original polygon and its own \
+embedding both identify as the trefoil, in the same chirality class. Only the \
+geometry improved -- and since the embedding is randomized, a second call \
+gives a different curve, with a different vertex count, that still identifies \
+the same way:"],
+   silent[HoldForm[emb = Cases[KnoodleDraw[K, "DrawingDimension" -> 3],
+       Tube[p_, _] :> Most[p], Infinity][[1]];]],
+   group[HoldForm[{KnoodleIdentify[K], KnoodleIdentify[emb]}]]};
 
 ex9 = {
    delim,
@@ -393,7 +458,7 @@ examplesSection = Cell[CellGroupData[Flatten[{
            "PrimaryExamplesSection"], ""}}], $Line = 0; Null]],
      "PrimaryExamplesSection"],
     silent[HoldForm[Needs["Knoodle`"]]],
-    ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, ex8b, ex9, ex10, ex11,
+    ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, ex8b, ex8c, ex8d, ex8e, ex9, ex10, ex11,
     exD1, exD2, exD3, exD4a, exD4b, exD5}], Open]];
 
 (* ---------- assemble + save ---------- *)

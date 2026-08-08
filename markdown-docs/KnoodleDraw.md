@@ -99,7 +99,8 @@ three public functions shares:
 | `"RandomizeProjection"` | `True` | Applies a random rotation (via `Reapr::RandomRotation`, *not* a shear — this was reworked mid-session, see Notes) before projecting/using 3D geometry. The default projection can degenerate on vertical/coplanar segments (stdin single-component case) or exact coincidental intersections between components (multi-component `.kndlxyz` case) — this defaults on to avoid both. Set to `False` for reproducibility (e.g. testing) or when you know your geometry is already generic. Meaningful for *any* 3D-geometry input (both the stdin single-curve path and the `.kndlxyz` multi-component file path — both were fixed to honor this flag over the course of the session; earlier in development the file path silently ignored it). No-op for PD-code/`PlanarDiagramComplex` input (nothing to project). |
 | `ImageSize` | `340` | Applies to the **widest** drawing of the output (in coordinate units, padding included); on multi-summand output every other drawing gets a proportionally smaller `ImageSize` so all drawings share one points-per-subgrid-unit scale (DRAWING-SPEC.md §9). Overrides any `FontSize` in `LabelStyle` when both are given explicitly. |
 | `"Orientation"` | `False` | `True` puts a solid arrowhead in **every** traversed arrowhead subgrid square — two per drawing edge, superimposed on the continuous strand, centered in its square, pointing along the arc's orientation, at most 1×1 subgrid unit so it survives any rescaling (DRAWING-SPEC.md §4; the head is a coordinate-space `Polygon`, not an `Arrowheads[]` spec, precisely so its size tracks the grid rather than the image). The density — a straight run of n cells shows 2n heads — is intentional; like arc labels, this is a debugging view. The former `True`/`All` distinction (one head per component vs. per arc) collapsed to a boolean; `All` is still accepted as a synonym for `True`. Arc polylines are emitted by `knoodledraw` in orientation order (verified: heads circulate consistently). Unknot-marker summands (`<\|"Unknot"->True\|>`) carry no arc data and draw without arrowheads. |
-| `"Thickness"` | `Automatic` | Strand stroke width. `Automatic` draws strands u/3 (one third of a subgrid unit) wide at the common scale, additionally capped at `AbsoluteThickness[7]` — the u/3 proportional bound is mandatory (DRAWING-SPEC.md §3.1: strokes must never reach a cell's interior or swallow the crossing gaps at any scale), the 7 pt cap keeps small diagrams at their familiar weight. An explicit number is `AbsoluteThickness[n]` in printer's points, clamped to the same u/3 bound. Any other value is passed through as a raw `Graphics` directive, unclamped (escape hatch, at the user's own risk). |
+| `"Thickness"` | `Automatic` | Strand stroke width. `Automatic` draws strands u/3 (one third of a subgrid unit) wide at the common scale, additionally capped at `AbsoluteThickness[7]` — the u/3 proportional bound is mandatory (DRAWING-SPEC.md §3.1: strokes must never reach a cell's interior or swallow the crossing gaps at any scale), the 7 pt cap keeps small diagrams at their familiar weight. An explicit number is `AbsoluteThickness[n]` in printer's points, clamped to the same u/3 bound. Any other value is passed through as a raw `Graphics` directive, unclamped (escape hatch, at the user's own risk). Under `"DrawingDimension" -> 3` it means something different — a `Tube` radius in the embedding's own coordinate units; see below. |
+| `"DrawingDimension"` | `2` | `2` draws the planar diagram; `3` returns a `Graphics3D` of a **3D embedding** of the same link — one `Tube` per physical link component. Any other value is a `KnoodleDraw::baddim` error. See "3D embedding output" below. |
 
 ## Rendering details worth knowing
 
@@ -179,6 +180,212 @@ three public functions shares:
   Color/opacity still use the theme system (`ThemeColor`) rather than fixed
   grays, so labels and checkerboard shading track light/dark mode and custom
   notebook themes automatically.
+
+## 3D embedding output (`"DrawingDimension" -> 3`)
+
+Added 2026-08-03, from the upstream handoff
+`~/Knoodle/handoff/paclet-3d-embedding-output/ROUND-1.md` (Knoodle branch
+`knoodledraw-reapr-embedding-output`, commit `9020e02c` — **not yet on
+Knoodle `main`**; the paclet gates on it at runtime, see "Gating" below).
+
+`KnoodleDraw[input, "DrawingDimension" -> 3]` returns a `Graphics3D` instead of a
+`Graphics`: Reapr's 3D embedding of the diagram, one closed `Tube` per
+physical link component, colored from the same wire-color palette the 2D
+drawing uses. It is the same `knoodledraw` invocation as always, with
+`--embedding` replacing the grid flags (which are 2D-only).
+
+### The guarantee
+
+**The emitted curves have precisely the link type of the input diagram** —
+that is the whole design goal of the upstream feature, and it is not free.
+`knoodlesimplify` hands over a list of *summands*, and that list does not say
+whether two summands were once **one** closed curve (a connect sum, cut
+apart) or **two** (a split link). Arc colors are the only record, so
+`--embedding` uses them: same-colored summands are rejoined by arc surgery
+(`PDC::ConnectedSum()`), disjoint-colored ones are left separate and
+translated apart in space.
+
+Verified locally (2026-08-03, all round-tripped through the paclet itself):
+
+- two trefoil summands both color 0 → **one** closed curve;
+  colors 0 and 1 → **two** curves with disjoint bounding boxes and lk = 0;
+- two linked circles → 2 curves, |lk| = 1 (Gauss integral on the emitted
+  points);
+- feeding the emitted points *back* into `KnoodleIdentify` returns the input's
+  own knot — 3_1, 8_2, and 3_1 # 3_1 (multiplicity 2) — with matching
+  chirality coset, across repeated randomized runs.
+
+### The wire schema
+
+`--embedding --format=wl` emits one association per input knot, one per line,
+so `runGeometry`'s existing `ToExpression /@ Select[..., StringStartsQ["<|"]]`
+line splitter reads it unchanged:
+
+```wl
+<|"Components" -> {
+    <|"Color" -> 0, "Closed" -> True, "Points" -> {{x,y,z}, ...}|>, ... }|>
+```
+
+- **`"Color"` is the wire color**, the same `ArcColors()` identity the 2D
+  emitter puts on every arc — so a component draws in the same palette color
+  in both views. `embeddingColorIndex` keys the shared `ColorData[97]` palette
+  by it exactly as `wireColorIndex` does for the 2D path.
+- **`"Closed" -> True` means the polyline closes implicitly**: the last point
+  is *not* a repeat of the first. `embeddingCurve` appends it.
+- **Split pieces are already translated apart** — that relative placement is
+  what keeps unlinked components unlinked, so nothing here re-lays-out or
+  per-component-rescales the result.
+- **`<|"Components" -> {}|>`** is the embedding's analogue of "produced no
+  geometry" (emitted per knot so the stream stays line-aligned); the paclet
+  answers it with `KnoodleDraw::failed`, same as the 2D path.
+- **Unknot components do appear**: a 0-crossing unknot has no diagram to lay
+  out, so the tool converts each to a 1-crossing kink first. `KnoodleDraw[{{}},
+  "DrawingDimension" -> 3]` gives a real closed curve, not an empty picture.
+
+### Randomization — what tests may and may not assert
+
+The run is randomized twice over: Reapr defaults to `permute_randomQ`, and
+`--embedding` additionally applies a random rotation. Two runs on one input
+give different — equally valid — coordinates, and **the vertex count varies
+too**. Assert on component counts, colors, and topology; never on coordinates
+or point counts.
+
+**`SeedRandom` does not pin it** (measured 2026-08-04). Both sources of
+randomness live in the `knoodledraw` *process*, not in the WL kernel, so the
+paclet has no handle on them: three calls under one `SeedRandom[21]` gave
+27-, 23-, and 25-vertex trefoils. `"RandomizeProjection" -> False` does not
+help either — it suppresses the *projection* shear, which is a different knob
+from Reapr's permutation and `--embedding`'s rotation (measured: 23 vs 25
+vertices with the flag off). So, unlike the 2D path — where
+`"RandomizeProjection" -> False` *is* fully reproducible, verified by hashing
+two identical calls — **dimension 3 currently has no reproducible mode at
+all**. Consequences:
+
+- Doc-notebook regeneration draws different 3D curves every run. That is
+  accepted, not a bug to chase; the reference-page examples deliberately carry
+  no `SeedRandom`, since one would only imply a determinism that does not
+  exist. (Note the 2D examples' `SeedRandom` calls are decorative for the same
+  reason wherever `"RandomizeProjection"` is left at its `True` default.)
+- Any test must assert on topology alone.
+- Worth an upstream ask: a `--seed` flag on `knoodledraw` would make both the
+  docs and any regression test deterministic. Not yet requested.
+
+The rotation is a deliberately temporary upstream workaround (Reapr takes x
+and y straight off the OrthoDraw grid, so the over/under jump at a crossing is
+an exactly vertical edge that projects to a point, which `FindIntersections`
+rejects). Henrik's Prosector work replaces it with a virtually isometric
+projection, after which axis-aligned output becomes possible — so **nothing
+in the paclet may depend on the embedding being rotated**.
+
+### Rendering
+
+- **One `Tube` per component**, on the closed cycle, colored
+  `ColorData[97][idx["Color"]]`.
+- **Tube radius** (`embeddingRadius`): two scales compete. Tubes must not
+  merge, which bounds the radius by the embedding's pitch — every edge is a
+  whole number of Reapr grid pitches and non-adjacent strands stay a full
+  pitch apart (measured: min edge = min non-adjacent segment separation =
+  10.0 exactly, on all three handoff samples), so the shortest edge measures
+  the pitch and pitch/3 still leaves a third of a pitch of daylight. But tubes
+  must also stay *visible*, and the embedding's extent grows with the crossing
+  number while its pitch does not — a fixed multiple of the pitch draws 8_2 as
+  hairlines at the `ImageSize` that suits a trefoil (8_2's bounding box is ~5×
+  the trefoil's at the same pitch). So the radius tracks the bounding-box
+  diagonal (diag/80, a constant fraction of the rendered image), clamped into
+  `[pitch/8, pitch/3]`. An explicit numeric `"Thickness"` is a radius in the
+  embedding's own coordinate units — *not* printer's points, unlike the 2D
+  meaning; any other `"Thickness"` value falls back to `Automatic`, since
+  `Tube` takes a radius, not a directive.
+- **`PlotRange` is shared across all knots of one call** (union bounding box,
+  grown by the radius) and `SphericalRegion -> True` fits the image to that
+  range's bounding sphere — so multi-knot output is at one common scale, the
+  3D analogue of the 2D common-scale rule, and each picture holds still under
+  interactive rotation.
+- `Lighting -> "Neutral"` (the default 3D lights tint the palette colors),
+  `Boxed -> False`. `PlotLegends -> Automatic` labels swatches with the wire
+  color values, exactly as in 2D.
+- Coordinates are grid-derived (order 10–1000), *not* normalized to a unit
+  box. Nothing rescales them.
+
+### Which options apply
+
+`"Simplify"`, `"RandomizeProjection"`, `ImageSize`, `"Thickness"`, and
+`PlotLegends` all apply. The 2D layout/decoration options —
+`"Checkerboard"`, `"Labels"`, `LabelStyle`, `"ExteriorFace"`,
+`"Orientation"` — have no meaning for an embedding and are ignored
+(`--exterior-face` is not even sent). Reapr's own knobs are reached through
+the existing `"LayoutOptions"` passthrough:
+
+```wl
+KnoodleDraw[Knot[4, 1], "DrawingDimension" -> 3,
+  "LayoutOptions" -> {"reapr-energy" -> "height", "reapr-scaling" -> 2.0}]
+```
+
+`--reapr-scaling` defaults to `1.0`. For `--reapr-energy`, use only **`tv`
+(default), `height`, `tv_mcf`** — the same three `KnoodleSimplify`'s
+`"ReaprEnergy"` validates against, and for the same reason: `dirichlet` and
+`bending` need a `KNOODLE_USE_UMFPACK` build and `tv_clp` needs
+`KNOODLE_USE_CLP`, neither compiled into the paclet's bundled binaries. See
+`markdown-docs/KnoodleSimplify.md` for the full account.
+
+Note the failure mode, which is why the example above does not use
+`dirichlet`: an unavailable energy is **not** an error. The tool warns on
+**stderr** and silently proceeds with TV — and the paclet reads only
+`"StandardOutput"`, so the warning is discarded and the user sees a perfectly
+good embedding computed with an energy they did not ask for. Verified
+2026-08-04 on all six values: `tv`, `height`, `tv_mcf` run clean; `dirichlet`,
+`bending`, `tv_clp` warn and fall back. (`tv_clp`'s fallback is benign — the
+warning says CLP solves the same problem, just faster.)
+
+Unlike `KnoodleSimplify`, `KnoodleDraw` does **not** validate this: these knobs
+are reached through the untyped `"LayoutOptions"` passthrough, which
+deliberately forwards whatever it is given. Promoting `"ReaprEnergy"` to a
+named, validated option on `KnoodleDraw` too would close the gap — worth doing
+if anyone actually reaches for these.
+
+### Gating
+
+`--embedding` is newer than the oldest `knoodledraw` this paclet supports, and
+an older binary **exits non-zero on the unknown flag** rather than ignoring
+it. So `$embeddingSupportedQ` probes `knoodledraw --help` once per session and
+caches the answer; without it `KnoodleDraw` issues `KnoodleDraw::noembedding`
+and returns `$Failed`. Note the help text goes to **stderr**, not stdout (the
+probe reads both streams — reading only `"StandardOutput"` silently reports
+"unsupported" on every binary).
+
+### Naming
+
+The option is `"DrawingDimension" -> 2 | 3`, not a boolean. The dimension *is*
+the thing the user is choosing, and reading `2`/`3` off a call says what comes
+back — a `Graphics` or a `Graphics3D` — where a boolean names an implementation
+detail (whether an embedding step ran). It also leaves room for a value to mean
+something later without another boolean. Anything but `2` or `3` is rejected up
+front with `KnoodleDraw::baddim` rather than silently falling back to a diagram.
+
+### Geometric repair (reference-page example `ex8e`)
+
+The link-type guarantee makes dimension 3 a **topology-preserving way to fix bad
+geometry**, which is the most persuasive demonstration of the feature and is what
+the reference page leads with. `SeedRandom[933]; K = RandomPoint[Ball[], 50]` is
+a 50-gon chosen (by sweeping 3000 seeds, `n = 50` and `n = 30`) to be a *trefoil*
+— almost all random 50-gons in a ball simplify to 30–60 crossings, far past what
+KLUT can name, so a seed that lands on a 3-crossing knot has to be hunted for.
+About 1 seed in 60 identifies at all, and only a handful of those are trefoils;
+`n = 50` proved to have enough hits that dropping to `n = 30` was unnecessary.
+
+What makes the picture worth showing, measured on that polygon:
+
+| | raw 50-gon | its embedding |
+|---|---|---|
+| vertices | 50 | 20–27, varying per run |
+| longest edge / shortest | **19.2×** | a small integer ratio (grid pitches) |
+| closest non-adjacent approach | **0.0128** — a *seventh* of its own shortest edge (0.092) | exactly one grid pitch, i.e. equal to the shortest edge |
+| `KnoodleIdentify` | `KnotSymbol[3, 1, True, e/r]` | `KnotSymbol[3, 1, True, e/r]` |
+
+So the raw polygon has near-misses seven times finer than its own edge scale —
+the geometry is far worse than the topology — while the embedding's tightest
+approach is a full pitch, the same bound `embeddingRadius` relies on. The two
+identify identically, chirality coset included, across repeated randomized runs.
 
 ## Comparison with KnotTheory's DrawPD (documentation examples)
 
@@ -260,3 +467,28 @@ KnoodleDraw[Knoodle`KnoodleSimplify[Knot[6, 2], "Unite" -> True], PlotLegends ->
 
 Full pipeline: simplify, connect-sum back to one diagram per split
 component, draw with a component-color legend.
+
+```
+KnoodleDraw[Knot[8, 2], "DrawingDimension" -> 3]
+```
+
+A 3D embedding of 8_2 instead of a diagram — a `Graphics3D` of one closed
+tube, rotatable, of precisely the input's knot type.
+
+```
+KnoodleDraw[{c1, c2}, "DrawingDimension" -> 3, PlotLegends -> Automatic]
+```
+
+Two linked circles embedded as a 2-component link, each component in its own
+color, with the wire-color legend.
+
+```
+SeedRandom[933]; K = RandomPoint[Ball[], 50];
+Graphics3D[Tube[Append[K, First[K]], 0.015], Boxed -> False]
+KnoodleDraw[K, "DrawingDimension" -> 3]
+{KnoodleIdentify[K], KnoodleIdentify[emb]}
+```
+
+Geometric repair: an awful random 50-gon, then the same knot re-embedded on
+Reapr's grid, then the proof that both are the trefoil. See "Geometric repair"
+above for the measurements and for why that seed.

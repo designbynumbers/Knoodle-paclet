@@ -86,13 +86,25 @@ jobs:
           echo "--- max GLIBC symbol version the binary requires (want <= 2.28) ---"
           objdump -T build/knoodlesimplify | grep -oE "GLIBC_[0-9.]+" | sort -V | tail -1 || true
 
+      # Asserts the exit status. This used to end in `|| true`, which passed even
+      # if a binary segfaulted -- and since Knoodle's fail-loud contract (main,
+      # 2026-08-04) the tools exit nonzero on a library error rather than exiting
+      # 0 with truncated output, so a swallowed status now hides real breakage.
+      # All three tools the paclet ships exit 0 on --help (polyfold, which does
+      # not, is not built here).
       - name: Smoke test (each binary runs)
         run: |
+          rc=0
           for f in build/*; do
             [ -f "$f" ] || continue
             echo "=== $f --help ==="
-            "$f" --help || true
+            if "$f" --help; then
+              echo "--- ok (exit 0)"
+            else
+              echo "--- FAILED (exit $?)"; rc=1
+            fi
           done
+          exit "$rc"
 
       - name: Upload binaries
         if: always()

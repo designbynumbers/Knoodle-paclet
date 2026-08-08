@@ -18,7 +18,10 @@ points, or a native Knoodle PD code (rows of 4 or 5 integers). Option \"Simplify
 the same knot is drawn. Option \"Checkerboard\" (False) shades the diagram's \
 two-colorable faces. Option \"Labels\" (a subset of {\"Crossings\",\"Arcs\",\"Faces\"}) \
 annotates the diagram with 0-based element ids; LabelStyle styles the label text. \
-Option \"Orientation\" (False) marks each arc's direction with arrowheads.";
+Option \"Orientation\" (False) marks each arc's direction with arrowheads. Option \
+\"DrawingDimension\" (2) set to 3 returns a Graphics3D instead: a 3D embedding of the \
+same link, one Tube per link component, colored as the diagram's strands are. The \
+embedding is randomized, so repeated calls give different curves of the same link type.";
 
 KnoodleSimplify::usage =
   "KnoodleSimplify[input] simplifies a knot or link diagram, returning a PlanarDiagramComplex \
@@ -109,6 +112,40 @@ If[$OperatingSystem =!= "Windows",
   Quiet @ Run["chmod +x " <> StringRiffle[
      ("\"" <> exe[#] <> "\"") & /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify"}, " "]]];
 
+(* ---- child process environment ------------------------------------------
+   Every tool invocation goes through runTool, which pins HOME to a scratch
+   directory we own. Tools/src/Profiler.hpp opens ~/Tools_Log.txt during static
+   initialization -- before main, unconditionally, in truncate mode -- so every
+   run of every binary, `--help` included, wipes whatever was in that file. The
+   Knoodle tools never call Profiler::Clear, so nothing on the CLI side can
+   prevent it; HomeDirectory() checks getenv("HOME") first, which makes this the
+   only lever we have. KnoodleDraw runs two binaries per drawing, so leaving it
+   alone means clobbering a file in the user's home directory on every call.
+
+   Two things fall out of it for free: the Rattle failure bundles default to
+   Profiler::log_file's parent (PlanarDiagramComplex/Simplify.hpp), so they land
+   here too rather than in $HOME; and Profiler's HomeDirectory() dereferences
+   getenv("HOMEDRIVE")/getenv("HOMEPATH") with no null check when HOME is unset,
+   which segfaults during static init -- setting HOME means we never take that
+   branch. Nothing the tools read depends on the real home: the only other
+   variable they consult is KNOODLE_KLUT_DIR, and runIdentify passes --data-dir
+   explicitly. *)
+$knoodleHome := ($knoodleHome =
+  Module[{dir = FileNameJoin[{$TemporaryDirectory, "knoodle-paclet-" <> ToString[$ProcessID]}]},
+   Quiet @ CreateDirectory[dir];
+   If[DirectoryQ[dir], dir, $TemporaryDirectory]]);
+
+(* Merged over the inherited environment, not substituted for it: passing a bare
+   association to ProcessEnvironment REPLACES the child's whole environment, which
+   drops TMPDIR -- and the tools' own diagnostic placement puts its per-process
+   directory under std::filesystem::temp_directory_path(), i.e. exactly there. *)
+$childEnv := ($childEnv = Append[Association[GetEnvironment[]], "HOME" -> $knoodleHome]);
+
+(* The single door to the CLI tools; takes RunProcess's own argument forms
+   (command / command+property / command+property+input). Centralized so a new
+   call site cannot forget the environment. *)
+runTool[cmd_List, rest___] := RunProcess[cmd, rest, ProcessEnvironment -> $childEnv];
+
 (* Square grid spacing requested from knoodledraw (see runGeometry). One grid
    square is this many coordinate units. Rendering follows DRAWING-SPEC.md,
    whose unit of account is the subgrid unit u = 1 coordinate unit = 1/4 of
@@ -149,22 +186,27 @@ tempFile[prefix_String, extension_String] :=
    .kndlxyz) exact coincidental intersections between components. Applied to
    whichever tool actually reads the geometry -- knoodlesimplify when
    simplifying first, knoodledraw otherwise -- in both the stdin (single
-   component) and file (multi-component) cases; both now honor the flag. *)
-runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False] := Module[{tsv, out, gridFlags, randFlag},
-  gridFlags = {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]};
+   component) and file (multi-component) cases; both now honor the flag.
+   embeddingQ swaps the 2D drawing for knoodledraw's 3D embedding output
+   (--embedding; see the embedding section below) -- the grid flags are
+   2D-only and do not apply to it. *)
+runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False, embeddingQ_ : False] :=
+ Module[{tsv, out, drawFlags, randFlag},
+  drawFlags = If[TrueQ[embeddingQ], {"--embedding"},
+     {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]}];
   randFlag = If[TrueQ[randomizeQ], {"--randomize-projection"}, {}];
   tsv = Which[
      TrueQ[simplify] && Head[in] === File,
       Module[{outFile = tempFile["knoodle-simplified-", ".tsv"]},
-       RunProcess[Join[{exe["knoodlesimplify"], "--output=" <> outFile}, randFlag, {First[in]}]];
+       runTool[Join[{exe["knoodlesimplify"], "--output=" <> outFile}, randFlag, {First[in]}]];
        Import[outFile, "Text"]],
      TrueQ[simplify],
-      RunProcess[Join[{exe["knoodlesimplify"], "--streaming-mode"}, randFlag], "StandardOutput", in],
+      runTool[Join[{exe["knoodlesimplify"], "--streaming-mode"}, randFlag], "StandardOutput", in],
      Head[in] === File, None,  (* draw directly from the file, no simplify step *)
      True, in];
   out = If[tsv === None,
-     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, randFlag, {First[in]}], "StandardOutput"],
-     RunProcess[Join[{exe["knoodledraw"], "--format=wl"}, gridFlags, extraFlags, randFlag], "StandardOutput", tsv]];
+     runTool[Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag, {First[in]}], "StandardOutput"],
+     runTool[Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag], "StandardOutput", tsv]];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
 
@@ -178,9 +220,9 @@ runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False] := Module[{tsv
    step rather than also drawing. *)
 runSimplifyPdc[in_, extraFlags_List] := If[Head[in] === File,
    Module[{outFile = tempFile["knoodle-pdc-", ".txt"]},
-    RunProcess[Join[{exe["knoodlesimplify"], "--format=pdc", "--output=" <> outFile}, extraFlags, {First[in]}]];
+    runTool[Join[{exe["knoodlesimplify"], "--format=pdc", "--output=" <> outFile}, extraFlags, {First[in]}]];
     Import[outFile, "Text"]],
-   RunProcess[Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags],
+   runTool[Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags],
      "StandardOutput", in]
 ];
 
@@ -701,11 +743,122 @@ render[geos_List, thick_, img_, imageGivenQ_, checkerboardQ_, labelSet_, legendQ
   If[Length[drawings] == 1, First[drawings], drawings]
 ];
 
+(* ---- 3D embedding ("DrawingDimension" -> 3) ------------------------------
+   knoodledraw --embedding emits Reapr's 3D embedding of the diagram instead
+   of a 2D drawing: one closed polyline per physical link component, and --
+   the whole point -- with precisely the link type of the input diagram.
+   knoodlesimplify hands over a list of summands that does not itself say
+   whether two summands were once one closed curve or two, so the tool uses
+   the arc colors to decide: same-colored summands are rejoined by arc
+   surgery, disjoint-colored ones are left separate and translated apart in
+   space. That relative placement is what keeps unlinked components unlinked,
+   so the embedding is rendered exactly as given -- never re-laid-out, and
+   never rescaled per component.
+
+   --format=wl gives one association per input knot,
+
+     <|"Components" -> {<|"Color"->c, "Closed"->True, "Points"->{{x,y,z},..}|>, ..}|>
+
+   parsed by runGeometry's existing line splitter. "Color" is the same wire
+   color the 2D emitter puts on every arc, so the two views color a component
+   identically. Coordinates are grid-derived (order 10-1000), not normalized
+   to a unit box. The run is randomized (Reapr permutes, and --embedding adds
+   a random rotation): coordinates AND vertex counts differ run to run, only
+   the topology is stable -- nothing here may depend on either, including on
+   the embedding being rotated at all, which is a temporary workaround
+   upstream. An input that yields nothing embeddable still comes back as
+   <|"Components" -> {}|>, keeping the stream line-aligned. See
+   ~/Knoodle/handoff/paclet-3d-embedding-output/ROUND-1.md. *)
+
+(* --embedding is newer than the oldest knoodledraw this paclet supports, and
+   an older binary exits non-zero on the unknown flag rather than ignoring
+   it, so probe --help once and cache the answer. knoodledraw prints its help
+   on stderr (stdout is reserved for the drawing), so check both streams
+   rather than assuming which one carries it. *)
+$embeddingSupportedQ := $embeddingSupportedQ = TrueQ @ StringContainsQ[
+   StringJoin[Lookup[Quiet @ runTool[{exe["knoodledraw"], "--help"}],
+      {"StandardOutput", "StandardError"}, ""]], "--embedding"];
+
+(* "Closed" -> True means the polyline closes implicitly -- the last point is
+   not a repeat of the first -- so close the cycle here. *)
+embeddingCurve[comp_] := With[{p = comp["Points"]},
+   If[TrueQ[comp["Closed"]], Append[p, First[p]], p]];
+
+embeddingColors[knot_] := Lookup[#, "Color", 0] & /@ knot["Components"];
+
+(* One palette shared by every component of every knot of the call, keyed by
+   wire color exactly as the 2D path's wireColorIndex keys it. *)
+embeddingColorIndex[knots_List] := With[{c = Union @@ (embeddingColors /@ knots)},
+   AssociationThread[c -> Range[Length[c]]]];
+
+(* Tube radius. Two competing scales set it. The tubes must not merge, which
+   bounds the radius by the embedding's own pitch: every edge is a whole
+   number of Reapr grid pitches and non-adjacent strands stay a full pitch
+   apart, so the shortest edge measures the pitch, and a radius of pitch/3
+   still leaves a third of a pitch of daylight between neighboring strands.
+   But the tubes must also stay *visible*, and the embedding's extent grows
+   with the crossing number while its pitch does not -- a fixed multiple of
+   the pitch draws an 8-crossing knot as hairlines at the same ImageSize that
+   suits a trefoil. So the radius tracks the bounding-box diagonal (a
+   constant fraction of the rendered image, empirically diag/80), clamped
+   into [pitch/8, pitch/3]: small diagrams keep slim strands, big ones
+   thicken up to the no-merge bound. An explicit number is a radius in the
+   embedding's own coordinate units (NOT printer's points, unlike the 2D
+   "Thickness"); any other value -- a Graphics directive meant for the 2D
+   path -- falls back to Automatic, since Tube takes a radius, not a
+   directive. *)
+embeddingRadius[r_?NumericQ, _] := r;
+embeddingRadius[_, curves_] := Module[{edges, pitch, pts},
+  edges = Join @@ (EuclideanDistance @@@ Partition[#, 2, 1] & /@ curves);
+  If[edges === {}, Return[1.]];
+  pitch = Min[edges];
+  pts = Join @@ curves;
+  Clip[EuclideanDistance[Min /@ Transpose[pts], Max /@ Transpose[pts]]/80,
+   {pitch/8, pitch/3}]
+];
+
+(* One knot's Graphics3D. range is shared across the call (see
+   embeddingRender), and SphericalRegion -> True fits the image to that
+   range's bounding sphere, so every knot of a multi-knot call is drawn at
+   one common scale and holds still under rotation. Lighting -> "Neutral"
+   keeps the palette colors readable (the default lights tint them). *)
+embeddingGraphics[knot_, idx_, radius_, range_, img_, legendQ_] := Module[{g, classes},
+  g = Graphics3D[
+    Table[{ColorData[97][idx[Lookup[c, "Color", 0]]], Tube[embeddingCurve[c], radius]},
+     {c, knot["Components"]}],
+    PlotRange -> range, Boxed -> False, Lighting -> "Neutral",
+    SphericalRegion -> True, ImageSize -> img];
+  classes = Union[embeddingColors[knot]];
+  If[TrueQ[legendQ],
+   Legended[g, LineLegend[ColorData[97][idx[#]] & /@ classes, classes]],
+   g]
+];
+
+(* Render every knot of one call: shared palette, shared tube radius, shared
+   plot range (the union bounding box, grown by the radius so no tube is
+   clipped). Single knot -> one Graphics3D, several -> a List, matching the
+   2D path's shape rule. *)
+embeddingRender[knots_List, thick_, img_, legendQ_] := Module[{idx, curves, r, pts, range, gs},
+  idx = embeddingColorIndex[knots];
+  curves = Join @@ (embeddingCurve /@ #["Components"] & /@ knots);
+  r = embeddingRadius[thick, curves];
+  pts = Join @@ curves;
+  range = Transpose[{Min /@ Transpose[pts] - r, Max /@ Transpose[pts] + r}];
+  gs = embeddingGraphics[#, idx, r, range, img, legendQ] & /@ knots;
+  If[Length[gs] == 1, First[gs], gs]
+];
+
 (* ---- public entry point ---- *)
 KnoodleDraw::badinput = "`1` is not a recognized knot/link input.";
 KnoodleDraw::failed =
   "knoodledraw produced no geometry for this input (degenerate or self-intersecting \
 geometry, or an invalid diagram).";
+KnoodleDraw::noembedding =
+  "This knoodledraw binary does not support 3D embedding output; \
+\"DrawingDimension\" -> 3 needs a newer Knoodle build.";
+KnoodleDraw::baddim =
+  "Value of option \"DrawingDimension\" -> `1` is not 2 (a planar diagram) or 3 \
+(a 3D embedding).";
 (* "Checkerboard": shade the two-colorable faces. "Labels": a subset of
    {"Crossings","Arcs","Faces"} (a single string is also accepted). Crossing
    and face labels sit in their host cell's reserved region; arc labels are
@@ -734,7 +887,24 @@ geometry, or an invalid diagram).";
    (KnotData/space-curve/point-list inputs); a no-op otherwise.
    "Thickness": Automatic (default) draws strands u/3 wide (capped at 7 pt);
    a number is an AbsoluteThickness in printer's points, clamped to the same
-   u/3 bound; any other directive is used as-is.
+   u/3 bound; any other directive is used as-is. Under "DrawingDimension" -> 3
+   it is instead a Tube radius in the embedding's own coordinate units
+   (Automatic tracks the bounding-box diagonal, clamped to the Reapr grid
+   pitch; see embeddingRadius).
+   "DrawingDimension": 2 (default) draws the planar diagram; 3 returns a
+   Graphics3D of a 3D embedding of the same link instead -- one Tube per
+   physical link component, colored from the same wire-color palette the 2D
+   drawing uses. Anything else is a KnoodleDraw::baddim error. The 2D
+   layout/label/decoration options ("Checkerboard", "Labels", LabelStyle,
+   "ExteriorFace", "Orientation") have no meaning for dimension 3 and are
+   ignored; "Simplify", "RandomizeProjection", ImageSize, "Thickness", and
+   PlotLegends all apply, and Reapr's own knobs are reached through
+   "LayoutOptions" (e.g. {"reapr-energy" -> "height"} -- only tv/height/tv_mcf
+   are compiled into the bundled binaries; the others warn on stderr and
+   silently fall back to tv, see markdown-docs/KnoodleDraw.md),
+   {"reapr-scaling" -> 2.0}). The embedding is randomized: repeated calls on
+   one input give different -- equally valid -- curves, with different vertex
+   counts.
    "Orientation": False (default) draws unoriented strands; True puts an
    arrowhead in every traversed arrowhead square -- two per drawing edge
    (spec 4.1; All is accepted as a synonym for True). Unknot-marker summands
@@ -745,16 +915,33 @@ geometry, or an invalid diagram).";
 Options[KnoodleDraw] = {"Simplify" -> Automatic, "LayoutOptions" -> {},
    "Checkerboard" -> False, "Labels" -> {}, LabelStyle -> {}, "ExteriorFace" -> Automatic,
    PlotLegends -> None, "RandomizeProjection" -> True, ImageSize -> 340,
-   "Thickness" -> Automatic, "Orientation" -> False};
-KnoodleDraw[input_, opts : OptionsPattern[]] := Module[{norm, tsv, def, simp, geos, labelSet, extFlag},
+   "Thickness" -> Automatic, "Orientation" -> False, "DrawingDimension" -> 2};
+KnoodleDraw[input_, opts : OptionsPattern[]] := Module[
+  {norm, tsv, def, simp, geos, labelSet, extFlag, dim, embedQ},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
   {tsv, def} = norm;
+  dim = OptionValue["DrawingDimension"];
+  (* InputForm so that a string "3" is not reported as a bare 3, which would
+     read as "3 is not 2 or 3". *)
+  If[dim =!= 2 && dim =!= 3,
+   Message[KnoodleDraw::baddim, ToString[dim, InputForm]]; Return[$Failed]];
+  embedQ = dim === 3;
+  If[embedQ && ! $embeddingSupportedQ, Message[KnoodleDraw::noembedding]; Return[$Failed]];
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
-  extFlag = Replace[OptionValue["ExteriorFace"],
-     {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}];
+  (* --exterior-face is a 2D layout flag; "LayoutOptions" still passes
+     through, since that is how Reapr's --reapr-* knobs are reached. *)
+  extFlag = If[embedQ, {}, Replace[OptionValue["ExteriorFace"],
+     {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}]];
   geos = runGeometry[tsv, simp, Join[toCliFlags[OptionValue["LayoutOptions"]], extFlag],
-    TrueQ[OptionValue["RandomizeProjection"]]];
+    TrueQ[OptionValue["RandomizeProjection"]], embedQ];
+  If[embedQ,
+   (* <|"Components" -> {}|> is the embedding's analogue of "produced no
+      geometry" -- emitted per knot so the stream stays line-aligned. *)
+   If[geos === {} || Join @@ (#["Components"] & /@ geos) === {},
+    Message[KnoodleDraw::failed]; Return[$Failed]];
+   Return @ embeddingRender[geos, OptionValue["Thickness"], OptionValue[ImageSize],
+     OptionValue[PlotLegends] =!= None]];
   If[geos === {}, Message[KnoodleDraw::failed]; Return[$Failed]];
   labelSet = Flatten[{OptionValue["Labels"]}];
   render[geos, OptionValue["Thickness"], OptionValue[ImageSize],
@@ -846,8 +1033,8 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
    File[...]-vs-stdin dispatch. *)
 runIdentify[in_, extraFlags_List] := Module[{dataFlag = {"--data-dir=" <> $KnoodleDataDirectory}},
    If[Head[in] === File,
-     RunProcess[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags, {First[in]}], "StandardOutput"],
-     RunProcess[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags], "StandardOutput", in]]
+     runTool[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags, {First[in]}], "StandardOutput"],
+     runTool[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags], "StandardOutput", in]]
 ];
 
 KnoodleIdentify::badinput = "`1` is not a recognized knot/link input.";
