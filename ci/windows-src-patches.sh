@@ -9,8 +9,8 @@
 # This file is intentionally the single source of truth for "what still needs
 # fixing upstream to build Knoodle on Windows."
 #
-# Currently: P2 (Tools' PrettyTypeName). Keep the harness -- the next
-# portability wart goes here.
+# Currently: P2 (Tools' PrettyTypeName), P3 (Tools' ToString of Int128).
+# Keep the harness -- the next portability wart goes here.
 #
 set -euo pipefail
 KND="${KND:-Knoodle}"
@@ -53,5 +53,20 @@ apply "P2: Tools PrettyTypeName bare #elif -> #else" \
   "submodules/Tensors/submodules/Tools/src/TypeName.hpp" \
   's/^    #elif$/    #else/' \
   '^    #elif$'
+
+# P3: Tools src/ToString.hpp, the generic integer ToString is
+#     `return std::format("{:d}",value);`, and MSVC's STL has no
+#     std::formatter<__int128> (libc++ and libstdc++ do). Knoodle reaches it
+#     with Int128 values: Prosector/IntersectionTime_Hybrid.hpp logs a
+#     DepressedCubic via TOOLS_LOGDUMP -> ToString(DepressedCubic) ->
+#     ToString(Int128). The replacement converts integers wider than 64 bits by
+#     hand, using only 64-bit division (clang targeting MSVC does not link the
+#     compiler-rt helpers that 128-bit division needs). Same diagnostics text
+#     everywhere; it is not on a hot path. Still on Tools main (5b85258).
+#     Delete when Tools' ToString handles 128-bit integers itself.
+apply "P3: Tools ToString for 128-bit integers without std::format" \
+  "submodules/Tensors/submodules/Tools/src/ToString.hpp" \
+  's#^            return std::format("{:d}",value);$#            if constexpr ( sizeof(T) > 8 ) { using U = unsigned __int128; const bool neg = value < T(0); U u = neg ? U(0) - static_cast<U>(value) : static_cast<U>(value); std::uint64_t d[4] = { std::uint64_t(u >> 96) \& 0xFFFFFFFFu, std::uint64_t(u >> 64) \& 0xFFFFFFFFu, std::uint64_t(u >> 32) \& 0xFFFFFFFFu, std::uint64_t(u) \& 0xFFFFFFFFu }; std::string s; do { std::uint64_t r = 0; for( int i = 0; i < 4; ++i ) { const std::uint64_t cur = (r << 32) | d[i]; d[i] = cur / 10; r = cur % 10; } s.insert(s.begin(), static_cast<char>('\''0'\'' + r)); } while( d[0] | d[1] | d[2] | d[3] ); if( neg ) { s.insert(s.begin(), '\''-'\''); } return s; } else { return std::format("{:d}",value); }#' \
+  '^            return std::format("{:d}",value);$'
 
 echo "=== temporary Windows src patches applied ==="
