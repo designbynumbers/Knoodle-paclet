@@ -9,13 +9,12 @@
 # This file is intentionally the single source of truth for "what still needs
 # fixing upstream to build Knoodle on Windows."
 #
-# Currently: nothing. The list is empty and the Windows build compiles against
-# unmodified Knoodle. Keep the harness -- the next portability wart goes here.
+# Currently: P2 (Tools' PrettyTypeName). Keep the harness -- the next
+# portability wart goes here.
 #
 set -euo pipefail
 KND="${KND:-Knoodle}"
 
-# shellcheck disable=SC2317  # not called while the patch list is empty
 apply () {  # description  file  sed-expr  match-pattern
   local desc="$1" f="$2" expr="$3" pat="$4"
   echo ">> $desc"
@@ -40,4 +39,19 @@ apply () {  # description  file  sed-expr  match-pattern
 #     rather than merging PR #17 -- Bends.hpp:165 is `<int>` upstream, with a
 #     comment recording the constraint. Removed 2026-08-07.
 
-echo "=== no temporary Windows src patches needed ==="
+# --- Active --------------------------------------------------------------------
+# P2: Tools src/TypeName.hpp, PrettyTypeName's last branch is a bare `#elif`
+#     (no condition) where `#else` was meant. A compiler only evaluates it when
+#     every earlier branch failed, and clang targeting MSVC is the one that gets
+#     there: TOOLS_COMPILER_IS_ANY_CLANG is defined as
+#       CLANG || APPLE_CLANG || CLANGCL && !defined(_MSC_VER)
+#     and && binds tighter than ||, so clang-cl (which defines _MSC_VER) never
+#     counts as "any clang". Then: "error: expected value in expression".
+#     Still present on HenrikSchumacher/Tools main (5b85258) as of 2026-11-06.
+#     Delete when the Knoodle pin carries a Tools with `#else` there.
+apply "P2: Tools PrettyTypeName bare #elif -> #else" \
+  "submodules/Tensors/submodules/Tools/src/TypeName.hpp" \
+  's/^    #elif$/    #else/' \
+  '^    #elif$'
+
+echo "=== temporary Windows src patches applied ==="
