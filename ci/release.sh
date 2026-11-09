@@ -110,6 +110,11 @@ cp -R "$REPO/Documentation" "$STAGE/Documentation"
 mkdir -p "$STAGE/Resources/Klut"
 cp -R "$REPO/Resources/ExampleData" "$STAGE/Resources/ExampleData"
 cp "$TBDIR/data/Klut/"Klut_Keys_*.bin "$TBDIR/data/Klut/"Klut_Values_*.tsv "$STAGE/Resources/Klut/"
+# The manifest (Knoodle after v1.1.0) must travel with the tables:
+# knoodleidentify checks them against it on every run.
+if [ -f "$TBDIR/data/Klut/Klut_Manifest.txt" ]; then
+  cp "$TBDIR/data/Klut/Klut_Manifest.txt" "$STAGE/Resources/Klut/"
+fi
 for a in "$ART"/knoodle-tools-*; do
   sid="${a##*knoodle-tools-}"
   mkdir -p "$STAGE/Resources/$sid"
@@ -117,6 +122,14 @@ for a in "$ART"/knoodle-tools-*; do
   chmod +x "$STAGE/Resources/$sid/"* 2>/dev/null || true
 done
 echo "   platforms staged: $(ls "$STAGE/Resources" | grep -v '^Klut$' | tr '\n' ' ')"
+
+# Check the staged tables, with this machine's own CI-built knoodleidentify
+# if one was staged (it runs --verify-tables on them).
+HOST_SID=$(wolframscript -code '$SystemID' | tr -d '"[:space:]')
+HOST_KI="$STAGE/Resources/$HOST_SID/knoodleidentify"
+[ -x "$HOST_KI" ] || HOST_KI=""
+echo "== checking the staged KLUT tables =="
+bash "$REPO/ci/check-klut.sh" "$STAGE/Resources/Klut" ${HOST_KI:+"$HOST_KI"}
 
 echo "== building .paclet (local Wolfram license) =="
 PACLET=$(wolframscript -file "$REPO/ci/package-paclet.wls" "$STAGE" "$OUT" | tail -1)
