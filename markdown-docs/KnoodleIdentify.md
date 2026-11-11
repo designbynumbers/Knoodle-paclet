@@ -68,15 +68,18 @@ redundant/unnecessary work, not wrong.
   resolve; if it doesn't, either the table has a real gap or something else
   went wrong) as opposed to `Unidentified`, which is simply expected/normal
   for large inputs.
-- **Update 2026-07-03 — the 13/16 boundary quirk**: upstream bumped
-  `Klut::max_crossing_count` from 13 to 16 (`src/Klut.hpp`; the table is
-  being extended) while the data still stops at 13, and the classification
-  boundary in `tools/klut_identify.hpp` follows the *constant*, not the
-  tables actually loaded. Net effect today: 14-16-crossing summands come
-  back `NotFound` (wrongly "suspicious") instead of `Unidentified`;
-  17-and-up correctly give `Unidentified`. Verified with (2,15) vs (2,17)
-  torus knots. Upstream fix tracked in TODO.md; the reference page's
-  Unidentified example uses (2,17) so it holds before and after the fix.
+- **The 13/16 boundary quirk — fixed in Knoodle 1.2.0.** Upstream had bumped
+  `Klut::max_crossing_count` from 13 to 16 while the data still stops at 13,
+  so 14-16-crossing summands used to come back `NotFound` (wrongly
+  "suspicious") instead of `Unidentified`. Re-checked 2026-11-11 on the 1.2.0
+  tools: a (2,15) torus knot gives `Unidentified[15, pd]` and (2,17) gives
+  `Unidentified[17, pd]`. The reference page's Unidentified example still
+  uses (2,17).
+- **A `NotFound` summand is a warning, not a failure.** `knoodleidentify`
+  exits nonzero when a summand comes back `NotFound`, but its answer is
+  complete. When every error line is of that kind, `KnoodleIdentify` returns
+  the answer with a `KnoodleIdentify::notfound` warning; any other nonzero
+  exit is a failure (next section but one).
 - **A genuine link** (see next section): fails outright, does not appear as
   a value in a returned Association at all.
 
@@ -92,22 +95,36 @@ either mis-identifying it or silently ignoring the restriction).
 | Option | Default | Meaning |
 |---|---|---|
 | `"MaxCrossings"` | `Automatic` | Maps to `knoodleidentify`'s `--max-crossings`. `Automatic` = the tool's own default (13, the KLUT's current max). Valid range 3-13. Restricts lookup to smaller subtables — smaller/faster, but anything above the restricted range that would otherwise have resolved instead comes back as `NotFound` (not `Unidentified` — the distinction above is based on the tool's *actual* max range, 13, not the caller-restricted one). |
-| `"RandomizeProjection"` | `True` | As in `KnoodleDraw`/`KnoodleSimplify`: randomly rotate 3D geometry before projecting, avoiding degenerate projections. Set `False` for the plain z-axis projection (reproducibility). No-op for explicit diagram input. Added 2026-07-03 once the upstream flag existed. |
+| `"Projection"` | `Automatic` | How 3D input is projected (Knoodle 1.2): `"Z"`, `"X"`, `"Y"` down that axis, exactly; `"Random"` after a uniformly random rotation. `Automatic` defers to `"RandomizeProjection"`. Ignored for diagram input. Same code path as `KnoodleDraw` — see there. |
+| `"RandomizeProjection"` | `True` | The older switch: under `"Projection" -> Automatic`, `True` means `"Random"`, `False` means `"Z"`. Added 2026-07-03 once the upstream flag existed. |
+| `"ExactInput"` | `False` | `True` sends `--exact-input`: 3D input that would need rounding (or rotating) is refused with `KnoodleIdentify::knoodletool` and `$Failed`. |
+| `RandomSeeding` | `Automatic` | As in `KnoodleDraw`: an integer or string fixes the tool's seed, `Inherited` takes it from `SeedRandom`. It pins the random projection and the escalation's Reapr embeddings, except OrthoDraw's bend randomization inside them. |
+| `"IdentifyOptions"` | `{}` | Forwards arbitrary `knoodleidentify` flags, same `"name" -> value` convention as `KnoodleDraw`'s `"LayoutOptions"`: e.g. `"escalation-rounds"`, `"escalation-band"`, `"allow-other-tables"`, the `"reapr-*"` knobs. They come after the paclet's own `--data-dir`, so a `"data-dir"` given here wins. Flags that change what the tool prints (`"expanded"`, `"tsv"`, `"verify-tables"`) break the parse and end in `KnoodleIdentify::failed`. |
 
-Not currently exposed as WL options (available only via the raw
-`knoodleidentify` CLI, not surfaced through this function at all):
-`--data-dir` (KLUT data directory — since the Asset-extension work of
-2026-07-03 the wrapper always passes `--data-dir=$KnoodleDataDirectory`
-explicitly, resolved via `AssetLocation` with a dev fallback to the sibling
-~/Knoodle checkout, so the CLI's own auto-detection is no longer relied
-on), `--expanded` (alternate one-line-per-knot output joined by `' # '`
-using raw `K[...]` table names instead of an `Association`), `--tsv`
-(per-summand tab-separated output), `--quiet` (suppresses the stderr
-summary — irrelevant to the WL wrapper anyway, since `RunProcess[...,
-"StandardOutput", ...]` only ever captures stdout, confirmed the summary
-line is cleanly stderr-only).
+### Tables, the manifest, and failures (Knoodle 1.2)
 
-## Geometry input: `"RandomizeProjection"` (resolved 2026-07-03)
+The wrapper always passes `--data-dir=$KnoodleDataDirectory` (the paclet's
+`KlutData` asset, with a dev fallback to `data/Klut` under
+`$KNOODLE_DEV_ROOT`), and since Knoodle 1.2 that is the *only* place the tool
+looks: `$KNOODLE_KLUT_DIR` is ignored when `--data-dir` is given, and a wrong
+directory is an error, not a fallback. At startup the tool checks the tables'
+structure, loads them all, and checks them against `Klut_Manifest.txt`; it
+refuses missing, damaged or foreign tables (exit 1). The paclet ships the
+manifest beside the tables (`ci/build-paclet.sh`, `ci/release.sh`). Verified
+2026-11-11 on the 1.2.0 tools:
+
+| Situation | Tool | `KnoodleIdentify` |
+|---|---|---|
+| `--data-dir` and `$KNOODLE_KLUT_DIR` both set | uses `--data-dir` | normal answer |
+| directory has no tables | exit 1, "Could not find KLUT tables in ..." | `KnoodleIdentify::knoodletool`, `$Failed` |
+| a table file truncated | exit 1, the table is refused | `KnoodleIdentify::knoodletool`, `$Failed` |
+| `Klut_Manifest.txt` missing | warning on stderr, exit 0 | normal answer (the warning is not shown) |
+
+Not exposed: `--expanded`, `--tsv` (alternate output formats; see
+`"IdentifyOptions"`), `--quiet` (suppresses the stderr summary, which the
+wrapper never shows except inside a failure message).
+
+## Geometry input: degenerate projections (resolved 2026-07-03; exact since Knoodle 1.2)
 
 Originally `knoodleidentify` had no `--randomize-projection` flag (unlike
 the other two tools), so a highly symmetric curve (e.g. an exact torus-knot
@@ -121,6 +138,14 @@ message (also emitted for any other empty/unparseable tool output) instead
 of failing silently. The same upstream commit fixed `CreateDiagramFrom3D`
 dropping zero-crossing curves, so an already-unknotted 3D curve now
 correctly identifies as `<||>` rather than producing no output.
+
+**Knoodle 1.2:** the projection itself is now exact. Degenerate views
+(vertical edges, crossings that meet at a vertex) are resolved by symbolic
+perturbation instead of failing, so `"Projection" -> "Z"` (or
+`"RandomizeProjection" -> False`) works on symmetric curves too; verified
+2026-11-11 on an exact torus-knot parametrization and on a planar square. The
+`KnoodleIdentify::failed` message stays for empty or unparseable output. The
+random rotation remains the default because it gives a generic diagram.
 
 ## Link handling: fails, does not return `<|Link[n]->1|>`
 

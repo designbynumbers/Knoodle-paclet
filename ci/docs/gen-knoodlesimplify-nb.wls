@@ -15,6 +15,9 @@ Needs["KnotTheory`"];
 (* Register the source checkout as a paclet so AssetLocation lookups in the
    examples resolve during generation, same as on an installed paclet. *)
 PacletDirectoryLoad[$repo];
+(* The generator's SeedRandom calls seed the tools too (see the same line in
+   gen-knoodledraw-nb.wls); Reapr's bend randomization stays unseeded. *)
+SetOptions[#, RandomSeeding -> Inherited] & /@ {KnoodleDraw, KnoodleSimplify, KnoodleIdentify};
 
 $out = FileNameJoin[{$repo, "Documentation", "English", "ReferencePages", "Symbols", "KnoodleSimplify.nb"}];
 
@@ -65,6 +68,13 @@ together, giving one diagram per split component -- the natural \
 one-PD-per-component form for other software."],
    notes["A diagram that simplifies all the way to a 0-crossing unknot is \
 recorded as an unknot summand of the complex rather than disappearing."],
+   notes["3D input is projected to a diagram as in KnoodleDraw: after a \
+uniformly random rotation by default, or straight down one axis with \
+\"Projection\" -> \"X\", \"Y\" or \"Z\". RandomSeeding seeds the random \
+projection and the random choices of the Reapr pipeline, except the bend \
+randomization of its planar layout; to repeat a full-pipeline run exactly, \
+also give \"SimplifyOptions\" -> {\"randomize-bends\" -> 0, \
+\"randomize-virtual-edges\" -> False}."],
    notes["The following options can be given:"],
    Cell[BoxData[GridBox[{
       optRow[ToBoxes["SimplifyLevel"], "Automatic",
@@ -74,9 +84,20 @@ detection; Automatic (or 6 and up) is the full Reapr pipeline"],
       optRow[ToBoxes["Unite"], "False",
        "False: one diagram per prime connect-sum factor; True: reconnect \
 same-colored factors into one diagram per split component"],
+      optRow[ToBoxes["Projection"], "Automatic",
+       "how 3D input is projected to a diagram: \"X\", \"Y\" or \"Z\" \
+straight down that axis, \"Random\" after a uniformly random rotation; \
+Automatic is \"Random\", or \"Z\" when \"RandomizeProjection\" -> False"],
       optRow[ToBoxes["RandomizeProjection"], "True",
-       "randomly rotate 3D input before projecting, avoiding degenerate \
-projections; set False for reproducibility"],
+       "the older switch for \"Projection\": False projects straight down the \
+z axis"],
+      optRow[ToBoxes["ExactInput"], "False",
+       "True refuses 3D input that cannot be projected exactly, instead of \
+rounding it onto an integer grid"],
+      optRow["RandomSeeding", "Automatic",
+       "seed for the random projection and the Reapr pipeline: an integer or \
+string, Inherited to follow SeedRandom, or Automatic for a fresh seed every \
+call"],
       optRow[ToBoxes["MaxReaprAttempts"], "Automatic",
        "maximum number of Reapr iterations; Automatic is the tool's default \
 of 25. Reapr runs only at \"SimplifyLevel\" 6 and up, so this has no effect \

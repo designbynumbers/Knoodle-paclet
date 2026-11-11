@@ -107,7 +107,10 @@ Not observed in practice yet, just a known structural risk.
 | Option | Default | Meaning |
 |---|---|---|
 | `"SimplifyLevel"` | `Automatic` | Maps to `knoodlesimplify`'s `--simplify-level`. `Automatic` = the tool's own default (full Reapr pipeline, level 6). The scale (rewired upstream at Knoodle `34ba537`, 2026-07-04 — levels 1–3 were silent no-ops before; see `~/Knoodle/handoff/knoodlesimplify-simplify-levels-rewired/`): `0` no simplification (PD passthrough); `1`–`3` **local-only diagnostic tiers**, no rerouting (`1` Reidemeister I only, `2` R I+II, `3` all local moves incl. assisted R1a/R2a) — for display and for benchmarking other simplifiers, *not* for hard diagrams; `4` path rerouting; `5` +summand/connect-sum detection; `6`+ full Reapr (randomized 3D embedding + compaction). The 3→4 boundary is deliberately **not** a superset: level 4 drops the local pass (upstream tuning found it doesn't help once rerouting engages), so per-level crossing counts need not be monotone between 3 and 4. The reference page demonstrates the tiers on the 128-crossing raw projection of a Gaussian random 100-gon (`SeedRandom[5]`, `"RandomizeProjection" -> False`): 128 → 119 (R1) → 45 (R1+R2) → 18 (all local) → 6 (full pipeline; `KnoodleIdentify` names it 6_2), with Haken's Gordian unknot as the counterpoint that stays at 141 crossings at every level below full. |
-| `"RandomizeProjection"` | `True` | Same semantics as `KnoodleDraw`'s option of the same name — see there. |
+| `"Projection"` | `Automatic` | How 3D input is projected (Knoodle 1.2's `--projection`): `"Z"`, `"X"`, `"Y"` project down that axis, exactly; `"Random"` after a uniformly random rotation. `Automatic` defers to `"RandomizeProjection"`. Ignored for PD input. An invalid value gives `KnoodleSimplify::badproj` and `$Failed`. Same option, same code path as `KnoodleDraw` — see there. |
+| `"RandomizeProjection"` | `True` | The older switch: under `"Projection" -> Automatic`, `True` means `"Random"` and `False` means `"Z"`. Since Knoodle 1.2 the random view is a full rotation (it used to be a shear of at most ~35°). |
+| `"ExactInput"` | `False` | `True` sends `--exact-input`: 3D input that would need rounding onto Knoodle's integer grid (or rotating, under `"Random"`) is refused — `KnoodleSimplify::knoodletool` quoting the tool's error, then `$Failed`. Integer coordinates pass under every projection. |
+| `RandomSeeding` | `Automatic` | `Automatic`: no seed (the tool seeds itself). An integer *n* sends `--seed=Mod[n, 2^64]`; a string is hashed (SHA-256) to a seed; `Inherited` draws the seed from Wolfram's generator, so `SeedRandom` governs it. The seed repeats a random projection exactly, but **not** a full (level 6) simplification: OrthoDraw's bend randomization inside Reapr is unseeded. Add `"SimplifyOptions" -> {"randomize-bends" -> 0, "randomize-virtual-edges" -> False}` to repeat that too (the tool's `--help` gives the same recipe). |
 | `"Unite"` | `False` | **The most important option for composite/split links.** `False` (default) matches `knoodlesimplify`'s own `--split` output shape: one diagram per diagrammatically-prime connect-sum factor, with same-colored factors belonging to the same original link component (colors are globally persistent/traceable across the whole complex — confirmed by reading `Split.hpp`, never renumbered per-summand). This is the natural input shape for `KnoodleIdentify` on a composite knot (e.g. the granny knot round-trips as *two separate* `KnotSymbol[3,1,...]` summands in this shape, with multiplicity 2 once identified). `True` uses `--unite`, which connect-sums same-colored factors *back together* via genuine arc splicing, giving one diagram per physically split link component — the natural single-PD-code-per-component form for exporting to KnotTheory or Regina. See the dedicated section below — getting this option's C++ implementation right took two attempts. |
 | `"MaxReaprAttempts"` | `Automatic` | Maps to `knoodlesimplify`'s `--max-reapr-attempts=K`, the maximum number of Reapr iterations. `Automatic` = the tool's own default of 25; a positive integer overrides it. **Reapr only** — Reapr runs solely at `"SimplifyLevel"` 6+ (the `Automatic` default), so this is a no-op at lower levels. |
 | `"Compaction"` | `True` | `False` emits `--no-compaction`, skipping OrthoDraw's compaction pass. **Reapr only** (same level caveat as above). |
@@ -136,6 +139,7 @@ all go through `"SimplifyOptions"`.
 | `"reapr-rotation-trials"` | `rotation_trials` | non-negative integer (default 25) |
 | `"reapr-permute-random"` | `permute_randomQ` | bool |
 | `"reapr-scaling"` | `scaling` | real (default 1.0) |
+| `"reapr-z-grid-size"` | (Knoodle 1.2) | positive integer: put consecutive levels of Reapr's embeddings that many units apart (x and y grid: 20) instead of scaling them. The tool refuses it together with `"reapr-scaling"` (`KnoodleSimplify::knoodletool`). |
 | `"randomize-bends"` | `randomize_bends` | integer (default 4) |
 | `"randomize-virtual-edges"` | `randomize_virtual_edgesQ` | bool |
 | `"compaction-method"` | `compaction_method` | `"unknown"`, `"topological-numbering"`, `"topological-ordering"`, `"length-mcf"` (default), `"length-clp"`, `"area-length-clp"` |
@@ -154,6 +158,12 @@ need `KNOODLE_USE_CLP`; neither is currently compiled into the paclet's
 bundled binaries, confirmed via `knoodlesimplify --help`, which lists only
 `TV, Height, TV_MCF` as available — hence `"ReaprEnergy"` validates against
 exactly those three.
+
+Not exposed: `-q`/`--quiet` (Knoodle 1.2; for `knoodlesimplify` it
+suppresses the per-knot reports and keeps only a counter). The paclet reads
+only the tool's `--format=pdc` output and shows stderr only to quote a
+failure, so `-q` would change nothing a user sees except to shorten those
+quotes.
 
 **Deliberately not exposed, anywhere**: `splitQ` (the `Simplify_Args_T`
 field, distinct from the `"Unite"` option above despite similar naming).

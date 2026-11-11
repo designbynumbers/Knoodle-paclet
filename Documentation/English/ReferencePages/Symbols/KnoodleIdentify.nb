@@ -10,46 +10,46 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       154,          7]
-NotebookDataLength[    151451,       3513]
-NotebookOptionsPosition[    142282,       3364]
-NotebookOutlinePosition[    142754,       3381]
-CellTagsIndexPosition[    142711,       3378]
+NotebookDataLength[    153515,       3548]
+NotebookOptionsPosition[    144244,       3398]
+NotebookOutlinePosition[    144716,       3415]
+CellTagsIndexPosition[    144673,       3412]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
 Notebook[{
 
 Cell[CellGroupData[{
-Cell["Categorization", "CategorizationSection",ExpressionUUID->"21b94db5-3119-46eb-9115-e2e339c5e0d0"],
+Cell["Categorization", "CategorizationSection",ExpressionUUID->"c24801bd-cc27-4eb7-b2c4-c093763dd1de"],
 
 Cell["Symbol", "Categorization",
  CellLabel->
-  "Entity Type",ExpressionUUID->"659df82a-fa9f-492f-a468-679b22a63913"],
+  "Entity Type",ExpressionUUID->"38564eee-3a2d-4c1f-a5c5-f25d746fd8e9"],
 
 Cell["Knoodle", "Categorization",
  CellLabel->
-  "Paclet Name",ExpressionUUID->"b50c4cda-554d-4bcb-8df7-468e8397f2a8"],
+  "Paclet Name",ExpressionUUID->"e198232e-f094-4976-8b8e-b2b42d64ce9f"],
 
 Cell["Knoodle`", "Categorization",
- CellLabel->"Context",ExpressionUUID->"7ef5479b-0582-4d4f-a44f-4c7e94c47880"],
+ CellLabel->"Context",ExpressionUUID->"d5dc5f66-ed6d-4255-a8d4-4586ac77ef67"],
 
 Cell["Knoodle/ref/KnoodleIdentify", "Categorization",
- CellLabel->"URI",ExpressionUUID->"cda9cf5c-c167-4862-9f7e-5f6d31f22d83"]
+ CellLabel->"URI",ExpressionUUID->"7aacdbbf-6230-48d7-887a-2e08950e59db"]
 }, Closed]],
 
 Cell[CellGroupData[{
 
-Cell["KnoodleIdentify", "ObjectName",ExpressionUUID->"fac523c8-f921-41e0-b1d5-a648d74fdcab"],
+Cell["KnoodleIdentify", "ObjectName",ExpressionUUID->"7a1a4cee-1bc2-437e-999c-0b84b383cb6b"],
 
 Cell[TextData[{
- Cell["   ", "ModInfo",ExpressionUUID->"ef8e22ad-c757-4cd1-9739-7184bcb14f61"],
+ Cell["   ", "ModInfo",ExpressionUUID->"ac77db7a-ca9c-49f0-b13c-b2c9be5700b5"],
  Cell[BoxData[
   RowBox[{"KnoodleIdentify", "[", 
    StyleBox["input", "TI"], "]"}]], "InlineFormula",ExpressionUUID->
-  "d28b7427-9ae2-4446-bd2d-9d29c05faa30"],
+  "ce88c780-a480-40e3-a1f3-1f5d0cea6853"],
  "\[LineSeparator]identifies the knot type of a knot diagram by looking it up \
 in Knoodle's knot lookup table (KLUT)."
-}], "Usage",ExpressionUUID->"8ce382e1-4947-4303-9c79-ad4f66647403"],
+}], "Usage",ExpressionUUID->"d8743791-f06e-4407-b9ff-4253a55aaafd"],
 
 Cell["\<\
 KnoodleIdentify returns an Association from each identified prime summand, a \
@@ -58,13 +58,13 @@ sum of several prime knots gives one entry per distinct prime factor, with \
 the factor's multiplicity as the value. The unknot gives <||>, the empty \
 association: an unknot summand is the identity element for connect sum, so it \
 is simply omitted.\
-\>", "Notes",ExpressionUUID->"5ff80e36-8600-4524-a379-c0df48b888bd"],
+\>", "Notes",ExpressionUUID->"81afcfa2-d4e2-4470-a5b3-28c298a7158f"],
 
 Cell["\<\
 input accepts the same representations as KnoodleDraw. The lookup is \
 self-contained: it decomposes and simplifies internally, so input need not be \
 simplified first.\
-\>", "Notes",ExpressionUUID->"0560b381-998f-4dea-83ce-3d789fedcd90"],
+\>", "Notes",ExpressionUUID->"4efa08a2-9e37-4341-92cf-81fc3c9bd43f"],
 
 Cell["\<\
 A summand with more crossings than the lookup covers (the table's 13, or \
@@ -73,47 +73,81 @@ is the summand's own signed PD code, for offline analysis. A summand inside \
 the lookup range that still fails to resolve comes back as NotFound[n, pd] -> \
 multiplicity instead, with a KnoodleIdentify::notfound warning: it points to \
 a gap in the tables or a hard simplification case.\
-\>", "Notes",ExpressionUUID->"9e67626e-527c-4740-91ad-8cea7f678ce7"],
+\>", "Notes",ExpressionUUID->"99c45f7f-9391-48d1-9ab1-c6ea2adf73ff"],
 
 Cell["\<\
 If knoodleidentify itself fails -- for instance because its KLUT tables are \
 missing, damaged or from another table set -- KnoodleIdentify returns $Failed \
 with a KnoodleIdentify::knoodletool message quoting the tool's error.\
-\>", "Notes",ExpressionUUID->"16dbab6d-dfb0-493d-90f9-9030db63c9a3"],
+\>", "Notes",ExpressionUUID->"bab264cc-8047-4c02-92fb-c0ee2eb111fa"],
 
 Cell["\<\
 KnoodleIdentify only identifies knots. A genuine link (more than one \
 component) fails with $Failed and a KnoodleIdentify::link message; apply \
 KnoodleSimplify with \"Unite\" -> True first if the components should be \
 treated as connect-summed into a single knot.\
-\>", "Notes",ExpressionUUID->"856e843b-1b26-470c-a394-06bf31206895"],
+\>", "Notes",ExpressionUUID->"076d1e97-9e50-44d4-8599-61230a8d783f"],
 
 Cell["\<\
-3D geometry is randomly rotated before being projected to a diagram, as in \
-KnoodleDraw and KnoodleSimplify -- without this a highly symmetric curve can \
-hit a degenerate projection and fail. Set \"RandomizeProjection\" -> False \
-for the plain z-axis projection; if the projection then degenerates, \
-KnoodleIdentify returns $Failed with a KnoodleIdentify::failed message.\
-\>", "Notes",ExpressionUUID->"a9646e71-f64e-49af-998b-9dc5af3c262c"],
+3D geometry is projected to a diagram as in KnoodleDraw and KnoodleSimplify: \
+after a uniformly random rotation by default, or straight down one axis with \
+\"Projection\" -> \"X\", \"Y\" or \"Z\". The projection is exact, so even a \
+highly symmetric curve viewed along an axis projects correctly. \
+\"ExactInput\" -> True refuses floating-point coordinates that would have to \
+be rounded onto Knoodle's integer grid, and RandomSeeding seeds the random \
+projection and the Reapr embeddings tried during escalation (all but the bend \
+randomization of their planar layout).\
+\>", "Notes",ExpressionUUID->"1033f72b-7c01-484d-b9ca-89501ccb3425"],
 
-Cell["The following options can be given:", "Notes",ExpressionUUID->"1c68a3c8-0ce6-46aa-849f-9a2992cf5923"],
+Cell["\<\
+KnoodleIdentify always tells knoodleidentify where the paclet's own KLUT \
+tables are, so an environment variable or a separate Knoodle installation \
+cannot substitute other tables. The tool checks the tables against the \
+manifest shipped with them before every run.\
+\>", "Notes",ExpressionUUID->"fa491ec4-e548-40b9-922f-f6b159110edb"],
+
+Cell["The following options can be given:", "Notes",ExpressionUUID->"d305e2eb-8d4c-4592-83b1-2e8b0a9a0fa9"],
 
 Cell[BoxData[GridBox[{
    {Cell["      ", "ModInfo",ExpressionUUID->
-     "8e33c348-70b1-4b37-8206-4b1083680118"], "\"\<MaxCrossings\>\"", 
+     "02d1a9bd-5def-4014-b8d8-3aaa27725c46"], "\"\<MaxCrossings\>\"", 
     "Automatic", Cell["\<\
 restrict the lookup to subtables with at most this many crossings (3 to 13); \
 Automatic is the table's full range. Knots above a restricted range come back \
 as Unidentified.\
-\>", "TableText",ExpressionUUID->"99f8e166-f101-45c2-bf4f-0d09ad4f461d"]},
+\>", "TableText",ExpressionUUID->"d7356196-fff5-4341-a9f6-791ad6294568"]},
    {Cell["      ", "ModInfo",ExpressionUUID->
-     "dbc0e1f2-12ff-4af9-90cb-bf4c9b30bd8b"], "\"\<RandomizeProjection\>\"", 
+     "30047ba7-06a1-4388-ac1f-3b9fad3930a1"], "\"\<Projection\>\"", 
+    "Automatic", Cell["\<\
+how 3D input is projected to a diagram: \"X\", \"Y\" or \"Z\" straight down \
+that axis, \"Random\" after a uniformly random rotation; Automatic is \
+\"Random\", or \"Z\" when \"RandomizeProjection\" -> False\
+\>", "TableText",ExpressionUUID->"530e0012-d101-4b9a-b17f-2d4917e10570"]},
+   {Cell["      ", "ModInfo",ExpressionUUID->
+     "ca3eda67-c1e0-4750-ab12-2e712956f42b"], "\"\<RandomizeProjection\>\"", 
     "True", Cell["\<\
-randomly rotate 3D input before projecting, avoiding degenerate projections; \
-set False for reproducibility\
-\>", "TableText",ExpressionUUID->"17625a15-62fb-4b5c-9e51-ddbba2f536a2"]}
-  }]], "3ColumnTableMod",ExpressionUUID->"78bac00b-62af-4245-bd64-\
-8754f7aaab97"]
+the older switch for \"Projection\": False projects straight down the z axis\
+\>", "TableText",ExpressionUUID->"facfc837-28e8-4961-bb00-af3f518dbdfb"]},
+   {Cell["      ", "ModInfo",ExpressionUUID->
+     "40d38308-89d8-4b61-a830-e2b4d9ab41af"], "\"\<ExactInput\>\"", "False", 
+    Cell["\<\
+True refuses 3D input that cannot be projected exactly, instead of rounding \
+it onto an integer grid\
+\>", "TableText",ExpressionUUID->"edccc4a0-22f3-42eb-9fcc-6035461067fa"]},
+   {Cell["      ", "ModInfo",ExpressionUUID->
+     "6eb54414-bdde-461d-b975-4fee067814ae"], "RandomSeeding", "Automatic", 
+    Cell["\<\
+seed for the tool's random choices: an integer or string, Inherited to follow \
+SeedRandom, or Automatic for a fresh seed every call\
+\>", "TableText",ExpressionUUID->"5e5bda29-6ca4-416f-9591-ec7dec6c641b"]},
+   {Cell["      ", "ModInfo",ExpressionUUID->
+     "51d0a329-2c96-4063-a4a8-b6e4ff8415eb"], "\"\<IdentifyOptions\>\"", 
+    RowBox[{"{", "}"}], Cell["\<\
+extra knoodleidentify flags, e.g. {\"escalation-rounds\" -> 6, \"reapr-energy\
+\" -> \"Height\"}; see knoodleidentify --help\
+\>", "TableText",ExpressionUUID->"e9d55733-11a6-439a-8f02-a2e2b37569cd"]}
+  }]], "3ColumnTableMod",ExpressionUUID->"a19ed92f-ca4f-4538-85f9-\
+92b33cb1784a"]
 }, Open  ]],
 
 Cell[CellGroupData[{
@@ -123,13 +157,13 @@ Cell[BoxData[
     {
      StyleBox["Examples", "PrimaryExamplesSection"], ""}
    }],
-  $Line = 0; Null]], "PrimaryExamplesSection",ExpressionUUID->"1305a003-afed-\
-426e-80eb-c6605d900c92"],
+  $Line = 0; Null]], "PrimaryExamplesSection",ExpressionUUID->"f2e5531b-2f1b-\
+4554-beb7-e76d59d5981e"],
 
 Cell[BoxData[
- RowBox[{"Needs", "[", "\"\<Knoodle`\>\"", "]"}]], "Input",ExpressionUUID->"0ebd5fb2-26d7-4760-b390-2eb35e30f457"],
+ RowBox[{"Needs", "[", "\"\<Knoodle`\>\"", "]"}]], "Input",ExpressionUUID->"3054f0bf-57cb-44bf-87b8-9567da64d480"],
 
-Cell["Identify the trefoil knot:", "ExampleText",ExpressionUUID->"dc86db3b-cdd0-4aaa-9cee-956e242eda9f"],
+Cell["Identify the trefoil knot:", "ExampleText",ExpressionUUID->"d5ee1574-4fad-4626-bee5-aa1ef56776af"],
 
 Cell[CellGroupData[{
 
@@ -137,7 +171,7 @@ Cell[BoxData[
  RowBox[{"KnoodleIdentify", "[", 
   RowBox[{"Knot", "[", 
    RowBox[{"3", ",", " ", "1"}], "]"}], "]"}]], "Input",ExpressionUUID->\
-"252e9675-07de-4364-97a5-21d5a807d735"],
+"706bdde9-ec40-429d-85a7-730ed9de7b6b"],
 
 Cell[BoxData[
  RowBox[{"\[LeftAssociation]", 
@@ -147,24 +181,24 @@ Cell[BoxData[
       SubscriptBox["3", "1"], "\"m/mr\""},
      "Superscript"],
     Knoodle`KnotSymbol[3, 1, True, "m/mr"]], "\[Rule]", "1"}], 
-  "\[RightAssociation]"}]], "Output",ExpressionUUID->"ca2ca245-fec7-434d-a7b1-\
-ac1f77b59e25"]
+  "\[RightAssociation]"}]], "Output",ExpressionUUID->"fe863ea9-acdb-4350-892c-\
+e075686a214b"]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"4324b1c1-74f5-4bee-9782-7164e673e675"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"a3eb8ad7-e074-44e2-804c-fcab33f30884"],
 
 Cell["\<\
 Identify a knot by its KnotData name; the coset field reports that the \
 figure-eight knot is fully amphichiral:\
-\>", "ExampleText",ExpressionUUID->"19d008ec-941d-4450-88f8-8de111855191"],
+\>", "ExampleText",ExpressionUUID->"d1aa1811-4547-4783-9c1d-baabcf5e5985"],
 
 Cell[CellGroupData[{
 
 Cell[BoxData[
  RowBox[{"KnoodleIdentify", "[", "\"\<FigureEight\>\"", "]"}]], "Input",Expres\
-sionUUID->"de13cb66-ef0e-4f3e-af58-e25e394d25fd"],
+sionUUID->"29b8d83b-2811-4816-a11c-9c256779421c"],
 
 Cell[BoxData[
  RowBox[{"\[LeftAssociation]", 
@@ -172,14 +206,14 @@ Cell[BoxData[
    InterpretationBox[
     SubscriptBox["4", "1"],
     Knoodle`KnotSymbol[4, 1, True, "e/m/r/mr"]], "\[Rule]", "1"}], 
-  "\[RightAssociation]"}]], "Output",ExpressionUUID->"dc395cf6-e51c-42b2-9eba-\
-a19b75edde0f"]
+  "\[RightAssociation]"}]], "Output",ExpressionUUID->"12000ba6-fcad-4480-b857-\
+7cc876b295d0"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"206fa50d-c68f-442a-b817-87be1d5542d1"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"cf65ba95-f674-43e2-9023-249e48768054"],
 
 Cell["\<\
 Knoodle's native PD code describes an explicit diagram, one crossing per row. \
@@ -191,7 +225,7 @@ fifth entry is the crossing's handedness (+1 right-handed, -1 left-handed), \
 and two further optional entries give the component colors of the incoming \
 under-arc and over-arc, which is how the components of a link keep their \
 identity. A PD code for the knot 5_2:\
-\>", "ExampleText",ExpressionUUID->"ccdc8aa6-eb6b-48fd-82d7-0024111ef645"],
+\>", "ExampleText",ExpressionUUID->"8afd71bd-ea3c-487c-8299-3954218ff0ce"],
 
 Cell[BoxData[
  RowBox[{
@@ -214,14 +248,14 @@ Cell[BoxData[
       RowBox[{"{", 
        RowBox[{"8", ",", " ", "3", ",", " ", "9", ",", " ", "4", ",", " ", 
         RowBox[{"-", "1"}]}], "}"}]}], "}"}]}], ";"}], " "}]], "Input",Express\
-ionUUID->"12ca460f-822d-4b1d-a6d8-b01161d018d3"],
+ionUUID->"9866d61e-39fb-41d0-80ea-319f49d47d0d"],
 
 Cell["\<\
 Drawing it with orientation arrows and crossing and arc labels shows the \
 correspondence. Row 1 is crossing 1: the strand enters along arc 0, passes \
 under, and continues as arc 1 -- and {0, 5, 1, 6} reads counterclockwise \
 around that crossing, starting from arc 0:\
-\>", "ExampleText",ExpressionUUID->"7e4a2f57-6ca5-44c4-a114-758f8796039f"],
+\>", "ExampleText",ExpressionUUID->"2c3cb8b8-05ad-47e7-9604-198b6f08ddd6"],
 
 Cell[CellGroupData[{
 
@@ -234,7 +268,7 @@ Cell[BoxData[
      RowBox[{"\"\<Crossings\>\"", ",", " ", "\"\<Arcs\>\""}], "}"}]}], ",", 
    " ", 
    RowBox[{"ImageSize", " ", "->", " ", "280"}]}], "]"}]], "Input",ExpressionU\
-UID->"de68a7cc-311c-4454-9fa0-9f7988225c4f"],
+UID->"2afbe459-6571-44c6-ad2b-143073593f67"],
 
 Cell[BoxData[
  GraphicsBox[{{}, 
@@ -859,20 +893,20 @@ Cell[BoxData[
       Rational[33, 2]}, {
       Rational[-1, 2], 
       Rational[33, 2]}}, {{-0.5, 16.5}, {-0.5, 16.5}}],
-  PlotRangePadding->None]], "Output",ExpressionUUID->"17b97d5c-f20f-4ca3-937e-\
-06839bd6846f"]
+  PlotRangePadding->None]], "Output",ExpressionUUID->"04303685-c573-4b66-b619-\
+2bb069f6da4f"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"1c054cc4-76ee-4b86-8931-dc7e83ce0c7f"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"66782b7e-1791-49e2-b411-d89cb42c1a19"],
 
 Cell["\<\
 A composite knot reports each distinct prime factor with its multiplicity. \
 The granny knot is the connect sum of two like-handed trefoils, given here as \
 two PD-code summands:\
-\>", "ExampleText",ExpressionUUID->"44dd19f2-b262-4c66-9af4-7f285fd648c1"],
+\>", "ExampleText",ExpressionUUID->"5a46e5a7-5e7b-4e42-ab76-c859845d7ceb"],
 
 Cell[BoxData[
  RowBox[{
@@ -903,13 +937,13 @@ Cell[BoxData[
         RowBox[{"{", 
          RowBox[{"1", ",", " ", "4", ",", " ", "2", ",", " ", "5", ",", " ", 
           RowBox[{"-", "1"}], ",", " ", "3", ",", " ", "3"}], "}"}]}], 
-       "}"}]}], "}"}]}], ";"}], " "}]], "Input",ExpressionUUID->"16da9b4e-\
-2dbc-468a-be53-ff7e473a5894"],
+       "}"}]}], "}"}]}], ";"}], " "}]], "Input",ExpressionUUID->"1de2c7de-\
+b796-4d1d-a308-b8fc5f22a132"],
 
 Cell[CellGroupData[{
 
 Cell[BoxData[
- RowBox[{"KnoodleIdentify", "[", "granny", "]"}]], "Input",ExpressionUUID->"d0e6f063-24f4-4bca-93eb-d10899b86ade"],
+ RowBox[{"KnoodleIdentify", "[", "granny", "]"}]], "Input",ExpressionUUID->"c57c65f5-6ba5-460f-b50c-847ff73535f7"],
 
 Cell[BoxData[
  RowBox[{"\[LeftAssociation]", 
@@ -919,39 +953,39 @@ Cell[BoxData[
       SubscriptBox["3", "1"], "\"m/mr\""},
      "Superscript"],
     Knoodle`KnotSymbol[3, 1, True, "m/mr"]], "\[Rule]", "2"}], 
-  "\[RightAssociation]"}]], "Output",ExpressionUUID->"c4d89abf-58fa-4fda-8d18-\
-f42e60b97a8d"]
+  "\[RightAssociation]"}]], "Output",ExpressionUUID->"d08ca783-e4f2-4466-943b-\
+7228f9cd3ea3"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"c0011f42-9652-42c0-8a80-6d7710a7598b"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"b533ad0f-865c-4792-acdb-f86ed0b10c08"],
 
-Cell["The unknot identifies as the empty association:", "ExampleText",ExpressionUUID->"a7a5f31b-c593-4961-bd8e-98489be91bbd"],
+Cell["The unknot identifies as the empty association:", "ExampleText",ExpressionUUID->"288ebd01-213f-44db-ac37-31993a128782"],
 
 Cell[CellGroupData[{
 
 Cell[BoxData[
  RowBox[{"KnoodleIdentify", "[", 
   RowBox[{"{", 
-   RowBox[{"{", "}"}], "}"}], "]"}]], "Input",ExpressionUUID->"916ecfd0-b37a-\
-4d19-af35-bbb5dc9cc446"],
+   RowBox[{"{", "}"}], "}"}], "]"}]], "Input",ExpressionUUID->"fa785b14-6f91-\
+42f8-8e6a-15acc173801d"],
 
 Cell[BoxData[
  RowBox[{"\[LeftAssociation]", "\[RightAssociation]"}]], "Output",ExpressionUU\
-ID->"8fe92bb7-c510-4425-85c8-ac05ab3cbf5c"]
+ID->"a1d6f4ea-0e8c-430c-92f4-f2e7017e66d3"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"1419e37f-8e34-4b72-8b19-be725acb49b0"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"ece17b18-b856-4c13-bb9e-72f0a6705c0d"],
 
 Cell["\<\
 Both KnoodleSimplify and KnoodleIdentify handle large geometric input \
 quickly. Generate a Gaussian random polygon with 5000 vertices:\
-\>", "ExampleText",ExpressionUUID->"9922a59a-bde0-458e-9bec-3d3206ceeab8"],
+\>", "ExampleText",ExpressionUUID->"dd57fe15-6479-4e7f-a93b-44d9d091a032"],
 
 Cell[BoxData[
  RowBox[{
@@ -966,7 +1000,7 @@ Cell[BoxData[
         RowBox[{"n", ",", " ", "3"}], "}"}]}], "]"}], ",", " ", "Mean", ",", 
      " ", 
      RowBox[{"1", " ", "&"}]}], " ", "]"}], "]"}]}]], "Input",ExpressionUUID->\
-"c74f7bee-ce39-471d-a441-8831e3c6076d"],
+"8498e99f-462a-4020-b879-bdccccfbfb35"],
 
 Cell[BoxData[
  RowBox[{
@@ -974,23 +1008,23 @@ Cell[BoxData[
    RowBox[{"SeedRandom", "[", "1", "]"}], ";", " ", 
    RowBox[{"P", " ", "=", " ", 
     RowBox[{"GaussianRandomPolygon", "[", "5000", "]"}]}], ";"}], 
-  " "}]], "Input",ExpressionUUID->"973d8195-b367-437c-a0b2-ddfe1f284c22"],
+  " "}]], "Input",ExpressionUUID->"27375997-c80f-4cbc-83ea-1f4aa2e9bd7c"],
 
 Cell["\<\
 Simplifying decomposes it into a connect sum of 14 prime summands, in a few \
 hundredths of a second:\
-\>", "ExampleText",ExpressionUUID->"a5951d58-10c8-4715-8cc8-f9435acca8ee"],
+\>", "ExampleText",ExpressionUUID->"d0432c8e-3c7a-4040-92b6-83a6efa10c49"],
 
 Cell[CellGroupData[{
 
 Cell[BoxData[
  RowBox[{"AbsoluteTiming", "[", 
   RowBox[{"KnoodleSimplify", "[", "P", "]"}], "]"}]], "Input",ExpressionUUID->\
-"41fbde96-f57e-4857-b38a-41b697a48679"],
+"a5ec89eb-0c9b-48ba-8f28-3958895ce23d"],
 
 Cell[BoxData[
  RowBox[{"{", 
-  RowBox[{"0.07644`", ",", 
+  RowBox[{"0.047`", ",", 
    InterpretationBox[
     RowBox[{
      TagBox["PlanarDiagramComplex",
@@ -1058,10 +1092,10 @@ Cell[BoxData[
       DynamicModuleValues:>{}], "]"}],
     Knoodle`PlanarDiagramComplex[<|
      "serialized" -> 
-      "s 1\n19\t16\t0\t17\t-1\t0\t0\n9\t1\t10\t0\t1\t0\t0\n1\t9\t2\t8\t1\t0\t\
-0\n7\t3\t8\t2\t1\t0\t0\n3\t11\t4\t10\t1\t0\t0\n11\t5\t12\t4\t1\t0\t0\n5\t15\t\
-6\t14\t1\t0\t0\n15\t7\t16\t6\t1\t0\t0\n17\t12\t18\t13\t-1\t0\t0\n13\t18\t14\t\
-19\t-1\t0\t0\ns 1\n7\t5\t0\t4\t1\t0\t0\n3\t1\t4\t0\t1\t0\t0\n1\t6\t2\t7\t-1\t\
+      "s 1\n19\t16\t0\t17\t-1\t0\t0\n9\t1\t10\t0\t1\t0\t0\n1\t11\t2\t10\t1\t0\
+\t0\n17\t2\t18\t3\t-1\t0\t0\n3\t18\t4\t19\t-1\t0\t0\n13\t5\t14\t4\t1\t0\t0\n5\
+\t13\t6\t12\t1\t0\t0\n11\t7\t12\t6\t1\t0\t0\n7\t15\t8\t14\t1\t0\t0\n15\t9\t16\
+\t8\t1\t0\t0\ns 1\n7\t5\t0\t4\t1\t0\t0\n3\t1\t4\t0\t1\t0\t0\n1\t6\t2\t7\t-1\t\
 0\t0\n5\t2\t6\t3\t-1\t0\t0\ns 1\n7\t5\t0\t4\t1\t0\t0\n3\t1\t4\t0\t1\t0\t0\n1\t\
 6\t2\t7\t-1\t0\t0\n5\t2\t6\t3\t-1\t0\t0\ns 1\n2\t0\t3\t5\t1\t0\t0\n0\t4\t1\t3\
 \t1\t0\t0\n4\t2\t5\t1\t1\t0\t0\ns 1\n2\t0\t3\t5\t1\t0\t0\n0\t4\t1\t3\t1\t0\t0\
@@ -1076,25 +1110,25 @@ Cell[BoxData[
 -1\t0\t0\n4\t1\t5\t2\t-1\t0\t0\n"|>],
     Editable->False,
     SelectWithContents->True,
-    Selectable->False]}], "}"}]], "Output",ExpressionUUID->"0b3e97ba-0210-\
-46df-8a57-5279083e528a"]
+    Selectable->False]}], "}"}]], "Output",ExpressionUUID->"e8cf07e3-1e79-\
+4d0f-a43f-eec49e1aac94"]
 }, Open  ]],
 
 Cell["\<\
 Identifying every summand is just as fast, and reports each prime factor with \
 its multiplicity, distinguishing mirror trefoils along the way:\
-\>", "ExampleText",ExpressionUUID->"c96d9158-2022-4b01-af3f-13ccfc7986b9"],
+\>", "ExampleText",ExpressionUUID->"29855273-8c5b-4062-ac0a-b349003829c2"],
 
 Cell[CellGroupData[{
 
 Cell[BoxData[
  RowBox[{"AbsoluteTiming", "[", 
   RowBox[{"KnoodleIdentify", "[", "P", "]"}], "]"}]], "Input",ExpressionUUID->\
-"fdd355f3-129f-45bc-91c0-ee7c63eefcbd"],
+"717a6098-1afb-4816-ae20-deee21cc1ccb"],
 
 Cell[BoxData[
  RowBox[{"{", 
-  RowBox[{"0.121819`", ",", 
+  RowBox[{"0.404109`", ",", 
    RowBox[{"\[LeftAssociation]", 
     RowBox[{
      RowBox[{
@@ -1117,21 +1151,21 @@ Cell[BoxData[
          SubscriptBox["10", "51"], "\"m/mr\""},
         "Superscript"],
        Knoodle`KnotSymbol[10, 51, True, "m/mr"]], "\[Rule]", "1"}]}], 
-    "\[RightAssociation]"}]}], "}"}]], "Output",ExpressionUUID->"1b46d7ec-\
-4a30-4e05-8565-f36ef0d0619d"]
+    "\[RightAssociation]"}]}], "}"}]], "Output",ExpressionUUID->"f8ef5a9c-\
+9ee9-47a7-b638-805e2d283405"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"c9d4c812-b285-43b0-a303-e7b80545a391"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"20bbd1cf-c3fb-4849-ab43-0e30932a373f"],
 
 Cell["\<\
 Lookup is by knot type, not by polynomial invariants, so KnoodleIdentify \
 distinguishes the famous mutant pair that shares Alexander and Jones \
 polynomials: the Conway knot (11n34) and the Kinoshita-Terasaka knot (11n42):\
 \
-\>", "ExampleText",ExpressionUUID->"490c3d6e-d262-465f-8061-54dc13a34d83"],
+\>", "ExampleText",ExpressionUUID->"8e75e7c7-e17d-4ba4-bfc5-4b95d17eed7e"],
 
 Cell[BoxData[
  RowBox[{
@@ -1171,8 +1205,8 @@ Cell[BoxData[
       ",", " ", 
       RowBox[{"X", "[", 
        RowBox[{"21", ",", " ", "10", ",", " ", "22", ",", " ", "11"}], 
-       "]"}]}], "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"b0218ee1-\
-0b43-478a-ac5a-49174728064d"],
+       "]"}]}], "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"d034171a-\
+f1c8-43c5-9d1e-6f454ac88868"],
 
 Cell[BoxData[
  RowBox[{
@@ -1212,8 +1246,8 @@ Cell[BoxData[
       ",", " ", 
       RowBox[{"X", "[", 
        RowBox[{"21", ",", " ", "16", ",", " ", "22", ",", " ", "17"}], 
-       "]"}]}], "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"4518afef-\
-3369-491f-80c4-c37f037e0e3a"],
+       "]"}]}], "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"619f0c77-\
+4b05-4bce-a426-b270632733b0"],
 
 Cell[CellGroupData[{
 
@@ -1221,7 +1255,7 @@ Cell[BoxData[
  RowBox[{"KnoodleIdentify", " ", "/@", " ", 
   RowBox[{"{", 
    RowBox[{"conway", ",", " ", "kt"}], "}"}]}]], "Input",ExpressionUUID->\
-"d7606642-3c7b-4944-89ee-1264869a525c"],
+"6a5ef218-dc76-4c3a-972e-cd64db79b9e7"],
 
 Cell[BoxData[
  RowBox[{"{", 
@@ -1237,8 +1271,8 @@ Cell[BoxData[
      InterpretationBox[
       SubscriptBox["\<\"11n\"\>", "42"],
       Knoodle`KnotSymbol[11, 42, False, "e"]], "\[Rule]", "1"}], 
-    "\[RightAssociation]"}]}], "}"}]], "Output",ExpressionUUID->"863b74dc-\
-954d-407b-9c88-2fd2b63564c6"]
+    "\[RightAssociation]"}]}], "}"}]], "Output",ExpressionUUID->"a55dff82-\
+6e7e-4119-b753-2af7d8559f90"]
 }, Open  ]],
 
 Cell[CellGroupData[{
@@ -1261,7 +1295,7 @@ Cell[BoxData[
          RowBox[{"ImageSize", " ", "->", " ", "200"}]}], "]"}], ",", 
        " ", "\"\<Kinoshita-Terasaka\>\""}], "]"}]}], "}"}], ",", " ", 
    RowBox[{"Spacer", "[", "25", "]"}]}], "]"}]], "Input",ExpressionUUID->\
-"06ae9640-1658-466d-a3bf-779c419f985d"],
+"c2276314-f9c0-42e3-ac72-8fa4d21da2cf"],
 
 Cell[BoxData[
  TemplateBox[{
@@ -1520,21 +1554,21 @@ ACcHbT4=
          Rational[57, 2]}}, {{-0.5, 28.5}, {-0.5, 28.5}}], PlotRangePadding -> 
      None, ImagePadding -> None, AspectRatio -> Automatic, ImageSize -> 
      200], {"\"Kinoshita-Terasaka\""}, {Bottom}]},
-  "RowWithSeparator"]], "Output",ExpressionUUID->"ddd5bfb2-70b7-4991-b22d-\
-152093cfac67"]
+  "RowWithSeparator"]], "Output",ExpressionUUID->"00349854-47e3-4dbb-a8b4-\
+5c93943fe86d"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"78fac9d3-4745-4577-90dd-936311b04d9c"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"d2156d46-ccad-4095-a01a-2ee2ff7dccab"],
 
 Cell["\<\
 9_32 is chiral and noninvertible, so its four symmetry variants (identity, \
 reverse, mirror, mirror-reverse) are four genuinely different oriented knots, \
 and KnoodleIdentify assigns each its own coset. Mirroring a PD code flips \
 every crossing; reversal renumbers the arcs backwards:\
-\>", "ExampleText",ExpressionUUID->"4af6eb47-0979-4504-b874-b3398213b68a"],
+\>", "ExampleText",ExpressionUUID->"cd0bcdc9-fb88-4577-b380-fd80f5621d96"],
 
 Cell[BoxData[
  RowBox[{
@@ -1566,7 +1600,7 @@ Cell[BoxData[
            RowBox[{"X", "[", 
             RowBox[{"l", ",", " ", "i", ",", " ", "j", ",", " ", "k"}], 
             "]"}]}], "]"}]}], ",", " ", "1"}], "]"}]}], "]"}]}], ";"}], 
-  " "}]], "Input",ExpressionUUID->"c83e0ce1-5749-4f48-8409-5825d7889710"],
+  " "}]], "Input",ExpressionUUID->"2291461b-d70c-4590-a181-72513c24826c"],
 
 Cell[BoxData[
  RowBox[{
@@ -1593,8 +1627,8 @@ Cell[BoxData[
            RowBox[{"s", " ", "-", " ", "l"}], ",", " ", 
            RowBox[{"s", " ", "-", " ", "i"}], ",", " ", 
            RowBox[{"s", " ", "-", " ", "j"}]}], "]"}]}], ",", " ", "1"}], 
-       "]"}]}], "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"e2fdd6e7-\
-8330-4fd6-bc3b-c39b2f9389ca"],
+       "]"}]}], "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"ca25ac7e-\
+9fd2-4473-a7c0-b30ffc1ac99c"],
 
 Cell[BoxData[
  RowBox[{
@@ -1628,8 +1662,8 @@ Cell[BoxData[
        " ", 
       RowBox[{"X", "[", 
        RowBox[{"12", ",", " ", "1", ",", " ", "13", ",", " ", "2"}], "]"}]}], 
-     "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"1056b37d-c141-4190-86b0-\
-175f353d8212"],
+     "]"}]}], ";"}], " "}]], "Input",ExpressionUUID->"c12586a9-3fda-4f9e-bd51-\
+a32de8c2d11f"],
 
 Cell[BoxData[
  RowBox[{
@@ -1641,12 +1675,12 @@ Cell[BoxData[
       RowBox[{"mirrorPD", "[", "k932", "]"}], ",", " ", 
       RowBox[{"mirrorPD", "[", 
        RowBox[{"reversePD", "[", "k932", "]"}], "]"}]}], "}"}]}], ";"}], 
-  " "}]], "Input",ExpressionUUID->"08147b9c-696f-4739-bc30-d94611d7df50"],
+  " "}]], "Input",ExpressionUUID->"c4d8e3fa-8d8e-421e-aa4c-9b238977527f"],
 
 Cell[CellGroupData[{
 
 Cell[BoxData[
- RowBox[{"KnoodleIdentify", " ", "/@", " ", "reps"}]], "Input",ExpressionUUID->"caf95eb7-b7bb-4568-8cad-522c64fe33c8"],
+ RowBox[{"KnoodleIdentify", " ", "/@", " ", "reps"}]], "Input",ExpressionUUID->"1561b186-fde2-447f-a297-6cc711645bfc"],
 
 Cell[BoxData[
  RowBox[{"{", 
@@ -1680,11 +1714,11 @@ Cell[BoxData[
         SubscriptBox["9", "32"], "\"mr\""},
        "Superscript"],
       Knoodle`KnotSymbol[9, 32, True, "mr"]], "\[Rule]", "1"}], 
-    "\[RightAssociation]"}]}], "}"}]], "Output",ExpressionUUID->"4aca371c-\
-8efb-4bad-b7cc-0abf7eb43011"]
+    "\[RightAssociation]"}]}], "}"}]], "Output",ExpressionUUID->"1fb50932-\
+a417-497c-85bc-c3dda7f92a92"]
 }, Open  ]],
 
-Cell["Oriented drawings of the four representatives:", "ExampleText",ExpressionUUID->"9f9c9054-8bbb-49d8-baf4-86a12572abad"],
+Cell["Oriented drawings of the four representatives:", "ExampleText",ExpressionUUID->"00f67d7f-7002-4f3a-88df-ae23cb25273d"],
 
 Cell[CellGroupData[{
 
@@ -1707,7 +1741,7 @@ Cell[BoxData[
         RowBox[{"\"\<e\>\"", ",", " ", "\"\<r\>\"", ",", " ", "\"\<m\>\"", ",",
           " ", "\"\<mr\>\""}], "}"}]}], "}"}]}], "]"}], ",", " ", 
    RowBox[{"Spacer", "[", "12", "]"}]}], "]"}]], "Input",ExpressionUUID->\
-"15f1ba4a-310d-4bec-9699-b1fe4fed03e8"],
+"f54d63a5-b329-4833-86b4-6b11992944a5"],
 
 Cell[BoxData[
  TemplateBox[{
@@ -3168,20 +3202,20 @@ FSo4FEDtU2I7w/PbS8EhDeqez13bz6loK8DdOw2kTVgB7h8p1wbH1ywKDlVQ
          Rational[49, 2]}}, {{-0.5, 24.5}, {-0.5, 24.5}}], PlotRangePadding -> 
      None, ImagePadding -> None, AspectRatio -> Automatic, ImageSize -> 
      160], {"\"mr\""}, {Bottom}]},
-  "RowWithSeparator"]], "Output",ExpressionUUID->"89e17856-b4fd-4f79-805d-\
-fd471abff0c7"]
+  "RowWithSeparator"]], "Output",ExpressionUUID->"3f4b8d77-d67f-46a9-adba-\
+6eff3b82f640"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"848b9628-46ef-4bf0-8b74-23aa410857ec"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"ab75ca69-cb05-4c54-8bc3-9b8bbba59201"],
 
 Cell["\<\
 A knot with more crossings than the lookup table covers comes back as \
 Unidentified together with its signed PD code. Here a (2,17) torus knot is \
 sampled as a space curve:\
-\>", "ExampleText",ExpressionUUID->"a76bda1f-cc91-4302-98be-09a673cf0786"],
+\>", "ExampleText",ExpressionUUID->"894cc9ef-cc78-40f6-b6bc-c0045f39f658"],
 
 Cell[BoxData[
  RowBox[{
@@ -3215,13 +3249,13 @@ Cell[BoxData[
          RowBox[{"2", "*", 
           RowBox[{"(", 
            RowBox[{"Pi", "/", "680"}], ")"}]}]}], "}"}]}], "]"}], "]"}]}], 
-   ";"}], " "}]], "Input",ExpressionUUID->"3055511b-4e24-4c94-b62e-\
-038ab86017e4"],
+   ";"}], " "}]], "Input",ExpressionUUID->"09c61a79-e2f3-472d-b0e4-\
+2615650ee458"],
 
 Cell[CellGroupData[{
 
 Cell[BoxData[
- RowBox[{"KnoodleIdentify", "[", "torus", "]"}]], "Input",ExpressionUUID->"e4b42730-1d88-4996-83b0-0b2c4cf0e1f9"],
+ RowBox[{"KnoodleIdentify", "[", "torus", "]"}]], "Input",ExpressionUUID->"3cb3596f-efcd-4b26-ae3e-6c6e954194f4"],
 
 Cell[BoxData[
  RowBox[{"\[LeftAssociation]", 
@@ -3281,19 +3315,19 @@ Cell[BoxData[
        RowBox[{"{", 
         RowBox[{"32", ",", "15", ",", "33", ",", "16", ",", 
          RowBox[{"-", "1"}]}], "}"}]}], "}"}]}], "]"}], "\[Rule]", "1"}], 
-  "\[RightAssociation]"}]], "Output",ExpressionUUID->"814e078e-db3a-4a87-98f7-\
-03ea07cd9249"]
+  "\[RightAssociation]"}]], "Output",ExpressionUUID->"53ac3658-4811-4137-8020-\
+5d6a85c745b4"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"7be26f68-445e-4d77-bd04-1f073288c5d7"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"88964871-c7e7-4fdb-b167-7baeda625517"],
 
 Cell["\<\
 Restricting \"MaxCrossings\" below a knot's crossing number leaves it \
 Unidentified:\
-\>", "ExampleText",ExpressionUUID->"56a7a1fa-3b2a-4a9a-af0e-e498232015f0"],
+\>", "ExampleText",ExpressionUUID->"6051c4d5-6d47-4c7e-8bdb-0cb9b3f8c112"],
 
 Cell[CellGroupData[{
 
@@ -3303,7 +3337,7 @@ Cell[BoxData[
    RowBox[{"Knot", "[", 
     RowBox[{"5", ",", " ", "1"}], "]"}], ",", " ", 
    RowBox[{"\"\<MaxCrossings\>\"", " ", "->", " ", "3"}]}], "]"}]], "Input",Ex\
-pressionUUID->"68cbf08d-9a56-494f-b0d8-de771e565538"],
+pressionUUID->"95eeafd8-c81d-425e-b179-f4c9aca216d3"],
 
 Cell[BoxData[
  RowBox[{"\[LeftAssociation]", 
@@ -3327,19 +3361,19 @@ Cell[BoxData[
        RowBox[{"{", 
         RowBox[{"8", ",", "3", ",", "9", ",", "4", ",", 
          RowBox[{"-", "1"}]}], "}"}]}], "}"}]}], "]"}], "\[Rule]", "1"}], 
-  "\[RightAssociation]"}]], "Output",ExpressionUUID->"d55f3fb2-6d64-49b1-b36a-\
-1a31e78a1769"]
+  "\[RightAssociation]"}]], "Output",ExpressionUUID->"cf9bb546-faf4-4db1-a669-\
+418cee03aea8"]
 }, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
 
-Cell["", "ExampleDelimiter",ExpressionUUID->"e5d9a451-410a-4ee6-87a1-fb1085ffbb74"],
+Cell["", "ExampleDelimiter",ExpressionUUID->"2a1d7298-6a37-435d-a5bd-bfd564e9bdbd"],
 
 Cell["\<\
 A genuine link fails with a KnoodleIdentify::link message rather than being \
 reported as if it were a knot:\
-\>", "ExampleText",ExpressionUUID->"00bc68b2-47ac-4edf-a98d-eb2debe16bd5"],
+\>", "ExampleText",ExpressionUUID->"cb87bf09-f84c-40f0-9f80-00454cf3d624"],
 
 Cell[CellGroupData[{
 
@@ -3355,9 +3389,9 @@ Cell[BoxData[
      RowBox[{
      "2", ",", " ", "3", ",", " ", "0", ",", " ", "1", ",", " ", "1", ",", 
       " ", "1", ",", " ", "1"}], "}"}]}], "}"}], "]"}]], "Input",ExpressionUUI\
-D->"0fee31ef-ed5d-4c67-87d4-defdebc4c527"],
+D->"c8b95430-2bc5-46c7-bc43-ac9de6a2ba1b"],
 
-Cell[BoxData["$Failed"], "Output",ExpressionUUID->"7b7aeba7-cdfa-4f21-87c7-94d17dff45b9"]
+Cell[BoxData["$Failed"], "Output",ExpressionUUID->"249d31c6-4d74-4d06-bd28-c682bc5bcee4"]
 }, Open  ]]
 }, Open  ]]
 }, Open  ]]
@@ -3367,7 +3401,7 @@ WindowMargins->{{331, Automatic}, {Automatic, 50}},
 FrontEndVersion->"15.0 for Mac OS X ARM (64-bit) (July 2, 2026)",
 StyleDefinitions->FrontEnd`FileName[{"Wolfram"}, "FunctionPageStylesExt.nb", 
   CharacterEncoding -> "UTF-8"],
-ExpressionUUID->"d2eb8a92-a0a5-4114-9abe-323df7d7c7a8"
+ExpressionUUID->"ec61e87d-24d5-4322-9122-234e4d65f1a6"
 ]
 (* End of Notebook Content *)
 
@@ -3381,137 +3415,138 @@ CellTagsIndex->{}
 (*NotebookFileOutline
 Notebook[{
 Cell[CellGroupData[{
-Cell[576, 22, 102, 0, 87, "CategorizationSection",ExpressionUUID->"21b94db5-3119-46eb-9115-e2e339c5e0d0"],
-Cell[681, 24, 117, 2, 87, "Categorization",ExpressionUUID->"659df82a-fa9f-492f-a468-679b22a63913"],
-Cell[801, 28, 118, 2, 87, "Categorization",ExpressionUUID->"b50c4cda-554d-4bcb-8df7-468e8397f2a8"],
-Cell[922, 32, 112, 1, 87, "Categorization",ExpressionUUID->"7ef5479b-0582-4d4f-a44f-4c7e94c47880"],
-Cell[1037, 35, 127, 1, 87, "Categorization",ExpressionUUID->"cda9cf5c-c167-4862-9f7e-5f6d31f22d83"]
+Cell[576, 22, 102, 0, 87, "CategorizationSection",ExpressionUUID->"c24801bd-cc27-4eb7-b2c4-c093763dd1de"],
+Cell[681, 24, 117, 2, 87, "Categorization",ExpressionUUID->"38564eee-3a2d-4c1f-a5c5-f25d746fd8e9"],
+Cell[801, 28, 118, 2, 87, "Categorization",ExpressionUUID->"e198232e-f094-4976-8b8e-b2b42d64ce9f"],
+Cell[922, 32, 112, 1, 87, "Categorization",ExpressionUUID->"d5dc5f66-ed6d-4255-a8d4-4586ac77ef67"],
+Cell[1037, 35, 127, 1, 87, "Categorization",ExpressionUUID->"7aacdbbf-6230-48d7-887a-2e08950e59db"]
 }, Closed]],
 Cell[CellGroupData[{
-Cell[1201, 41, 92, 0, 87, "ObjectName",ExpressionUUID->"fac523c8-f921-41e0-b1d5-a648d74fdcab"],
-Cell[1296, 43, 445, 8, 87, "Usage",ExpressionUUID->"8ce382e1-4947-4303-9c79-ad4f66647403"],
-Cell[1744, 53, 488, 7, 87, "Notes",ExpressionUUID->"5ff80e36-8600-4524-a379-c0df48b888bd"],
-Cell[2235, 62, 248, 4, 87, "Notes",ExpressionUUID->"0560b381-998f-4dea-83ce-3d789fedcd90"],
-Cell[2486, 68, 522, 7, 87, "Notes",ExpressionUUID->"9e67626e-527c-4740-91ad-8cea7f678ce7"],
-Cell[3011, 77, 307, 4, 87, "Notes",ExpressionUUID->"16dbab6d-dfb0-493d-90f9-9030db63c9a3"],
-Cell[3321, 83, 346, 5, 87, "Notes",ExpressionUUID->"856e843b-1b26-470c-a394-06bf31206895"],
-Cell[3670, 90, 455, 6, 87, "Notes",ExpressionUUID->"a9646e71-f64e-49af-998b-9dc5af3c262c"],
-Cell[4128, 98, 107, 0, 87, "Notes",ExpressionUUID->"1c68a3c8-0ce6-46aa-849f-9a2992cf5923"],
-Cell[4238, 100, 831, 15, 87, "3ColumnTableMod",ExpressionUUID->"78bac00b-62af-4245-bd64-8754f7aaab97"]
+Cell[1201, 41, 92, 0, 87, "ObjectName",ExpressionUUID->"7a1a4cee-1bc2-437e-999c-0b84b383cb6b"],
+Cell[1296, 43, 445, 8, 87, "Usage",ExpressionUUID->"d8743791-f06e-4407-b9ff-4253a55aaafd"],
+Cell[1744, 53, 488, 7, 87, "Notes",ExpressionUUID->"81afcfa2-d4e2-4470-a5b3-28c298a7158f"],
+Cell[2235, 62, 248, 4, 87, "Notes",ExpressionUUID->"4efa08a2-9e37-4341-92cf-81fc3c9bd43f"],
+Cell[2486, 68, 522, 7, 87, "Notes",ExpressionUUID->"99c45f7f-9391-48d1-9ab1-c6ea2adf73ff"],
+Cell[3011, 77, 307, 4, 87, "Notes",ExpressionUUID->"bab264cc-8047-4c02-92fb-c0ee2eb111fa"],
+Cell[3321, 83, 346, 5, 87, "Notes",ExpressionUUID->"076d1e97-9e50-44d4-8599-61230a8d783f"],
+Cell[3670, 90, 656, 9, 87, "Notes",ExpressionUUID->"1033f72b-7c01-484d-b9ca-89501ccb3425"],
+Cell[4329, 101, 348, 5, 87, "Notes",ExpressionUUID->"fa491ec4-e548-40b9-922f-f6b159110edb"],
+Cell[4680, 108, 107, 0, 87, "Notes",ExpressionUUID->"d305e2eb-8d4c-4592-83b1-2e8b0a9a0fa9"],
+Cell[4790, 110, 2243, 39, 87, "3ColumnTableMod",ExpressionUUID->"a19ed92f-ca4f-4538-85f9-92b33cb1784a"]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[5106, 120, 216, 6, 87, "PrimaryExamplesSection",ExpressionUUID->"1305a003-afed-426e-80eb-c6605d900c92"],
-Cell[5325, 128, 128, 1, 87, "Input",ExpressionUUID->"0ebd5fb2-26d7-4760-b390-2eb35e30f457"],
-Cell[5456, 131, 104, 0, 87, "ExampleText",ExpressionUUID->"dc86db3b-cdd0-4aaa-9cee-956e242eda9f"],
+Cell[7070, 154, 216, 6, 87, "PrimaryExamplesSection",ExpressionUUID->"f2e5531b-2f1b-4554-beb7-e76d59d5981e"],
+Cell[7289, 162, 128, 1, 87, "Input",ExpressionUUID->"3054f0bf-57cb-44bf-87b8-9567da64d480"],
+Cell[7420, 165, 104, 0, 87, "ExampleText",ExpressionUUID->"d5ee1574-4fad-4626-bee5-aa1ef56776af"],
 Cell[CellGroupData[{
-Cell[5585, 135, 185, 4, 87, "Input",ExpressionUUID->"252e9675-07de-4364-97a5-21d5a807d735"],
-Cell[5773, 141, 319, 9, 87, "Output",ExpressionUUID->"ca2ca245-fec7-434d-a7b1-ac1f77b59e25"]
+Cell[7549, 169, 185, 4, 87, "Input",ExpressionUUID->"706bdde9-ec40-429d-85a7-730ed9de7b6b"],
+Cell[7737, 175, 319, 9, 87, "Output",ExpressionUUID->"fe863ea9-acdb-4350-892c-e075686a214b"]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[6129, 155, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"4324b1c1-74f5-4bee-9782-7164e673e675"],
-Cell[6215, 157, 198, 3, 87, "ExampleText",ExpressionUUID->"19d008ec-941d-4450-88f8-8de111855191"],
+Cell[8093, 189, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"a3eb8ad7-e074-44e2-804c-fcab33f30884"],
+Cell[8179, 191, 198, 3, 87, "ExampleText",ExpressionUUID->"d1aa1811-4547-4783-9c1d-baabcf5e5985"],
 Cell[CellGroupData[{
-Cell[6438, 164, 143, 2, 87, "Input",ExpressionUUID->"de13cb66-ef0e-4f3e-af58-e25e394d25fd"],
-Cell[6584, 168, 269, 7, 87, "Output",ExpressionUUID->"dc395cf6-e51c-42b2-9eba-a19b75edde0f"]
+Cell[8402, 198, 143, 2, 87, "Input",ExpressionUUID->"29b8d83b-2811-4816-a11c-9c256779421c"],
+Cell[8548, 202, 269, 7, 87, "Output",ExpressionUUID->"12000ba6-fcad-4480-b857-7cc876b295d0"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[6902, 181, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"206fa50d-c68f-442a-b817-87be1d5542d1"],
-Cell[6988, 183, 740, 10, 87, "ExampleText",ExpressionUUID->"ccdc8aa6-eb6b-48fd-82d7-0024111ef645"],
-Cell[7731, 195, 902, 21, 87, "Input",ExpressionUUID->"12ca460f-822d-4b1d-a6d8-b01161d018d3"],
-Cell[8636, 218, 355, 5, 87, "ExampleText",ExpressionUUID->"7e4a2f57-6ca5-44c4-a114-758f8796039f"],
+Cell[8866, 215, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"cf65ba95-f674-43e2-9023-249e48768054"],
+Cell[8952, 217, 740, 10, 87, "ExampleText",ExpressionUUID->"8afd71bd-ea3c-487c-8299-3954218ff0ce"],
+Cell[9695, 229, 902, 21, 87, "Input",ExpressionUUID->"9866d61e-39fb-41d0-80ea-319f49d47d0d"],
+Cell[10600, 252, 355, 5, 87, "ExampleText",ExpressionUUID->"2c3cb8b8-05ad-47e7-9604-198b6f08ddd6"],
 Cell[CellGroupData[{
-Cell[9016, 227, 418, 9, 87, "Input",ExpressionUUID->"de68a7cc-311c-4454-9fa0-9f7988225c4f"],
-Cell[9437, 238, 27341, 624, 87, "Output",ExpressionUUID->"17b97d5c-f20f-4ca3-937e-06839bd6846f"]
+Cell[10980, 261, 418, 9, 87, "Input",ExpressionUUID->"2afbe459-6571-44c6-ad2b-143073593f67"],
+Cell[11401, 272, 27341, 624, 87, "Output",ExpressionUUID->"04303685-c573-4b66-b619-2bb069f6da4f"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[36827, 868, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"1c054cc4-76ee-4b86-8931-dc7e83ce0c7f"],
-Cell[36913, 870, 264, 4, 87, "ExampleText",ExpressionUUID->"44dd19f2-b262-4c66-9af4-7f285fd648c1"],
-Cell[37180, 876, 1369, 30, 87, "Input",ExpressionUUID->"16da9b4e-2dbc-468a-be53-ff7e473a5894"],
+Cell[38791, 902, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"66782b7e-1791-49e2-b411-d89cb42c1a19"],
+Cell[38877, 904, 264, 4, 87, "ExampleText",ExpressionUUID->"5a46e5a7-5e7b-4e42-ab76-c859845d7ceb"],
+Cell[39144, 910, 1369, 30, 87, "Input",ExpressionUUID->"1de2c7de-b796-4d1d-a308-b8fc5f22a132"],
 Cell[CellGroupData[{
-Cell[38574, 910, 128, 1, 87, "Input",ExpressionUUID->"d0e6f063-24f4-4bca-93eb-d10899b86ade"],
-Cell[38705, 913, 319, 9, 87, "Output",ExpressionUUID->"c4d89abf-58fa-4fda-8d18-f42e60b97a8d"]
+Cell[40538, 944, 128, 1, 87, "Input",ExpressionUUID->"c57c65f5-6ba5-460f-b50c-847ff73535f7"],
+Cell[40669, 947, 319, 9, 87, "Output",ExpressionUUID->"d08ca783-e4f2-4466-943b-7228f9cd3ea3"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[39073, 928, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"c0011f42-9652-42c0-8a80-6d7710a7598b"],
-Cell[39159, 930, 125, 0, 87, "ExampleText",ExpressionUUID->"a7a5f31b-c593-4961-bd8e-98489be91bbd"],
+Cell[41037, 962, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"b533ad0f-865c-4792-acdb-f86ed0b10c08"],
+Cell[41123, 964, 125, 0, 87, "ExampleText",ExpressionUUID->"288ebd01-213f-44db-ac37-31993a128782"],
 Cell[CellGroupData[{
-Cell[39309, 934, 167, 4, 87, "Input",ExpressionUUID->"916ecfd0-b37a-4d19-af35-bbb5dc9cc446"],
-Cell[39479, 940, 137, 2, 87, "Output",ExpressionUUID->"8fe92bb7-c510-4425-85c8-ac05ab3cbf5c"]
+Cell[41273, 968, 167, 4, 87, "Input",ExpressionUUID->"fa785b14-6f91-42f8-8e6a-15acc173801d"],
+Cell[41443, 974, 137, 2, 87, "Output",ExpressionUUID->"a1d6f4ea-0e8c-430c-92f4-f2e7017e66d3"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[39665, 948, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"1419e37f-8e34-4b72-8b19-be725acb49b0"],
-Cell[39751, 950, 221, 3, 87, "ExampleText",ExpressionUUID->"9922a59a-bde0-458e-9bec-3d3206ceeab8"],
-Cell[39975, 955, 509, 13, 87, "Input",ExpressionUUID->"c74f7bee-ce39-471d-a441-8831e3c6076d"],
-Cell[40487, 970, 260, 6, 87, "Input",ExpressionUUID->"973d8195-b367-437c-a0b2-ddfe1f284c22"],
-Cell[40750, 978, 187, 3, 87, "ExampleText",ExpressionUUID->"a5951d58-10c8-4715-8cc8-f9435acca8ee"],
+Cell[41629, 982, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"ece17b18-b856-4c13-bb9e-72f0a6705c0d"],
+Cell[41715, 984, 221, 3, 87, "ExampleText",ExpressionUUID->"dd57fe15-6479-4e7f-a93b-44d9d091a032"],
+Cell[41939, 989, 509, 13, 87, "Input",ExpressionUUID->"8498e99f-462a-4020-b879-bdccccfbfb35"],
+Cell[42451, 1004, 260, 6, 87, "Input",ExpressionUUID->"27375997-c80f-4cbc-83ea-1f4aa2e9bd7c"],
+Cell[42714, 1012, 187, 3, 87, "ExampleText",ExpressionUUID->"d0432c8e-3c7a-4040-92b6-83a6efa10c49"],
 Cell[CellGroupData[{
-Cell[40962, 985, 166, 3, 87, "Input",ExpressionUUID->"41fbde96-f57e-4857-b38a-41b697a48679"],
-Cell[41131, 990, 4592, 89, 87, "Output",ExpressionUUID->"0b3e97ba-0210-46df-8a57-5279083e528a"]
+Cell[42926, 1019, 166, 3, 87, "Input",ExpressionUUID->"a5ec89eb-0c9b-48ba-8f28-3958895ce23d"],
+Cell[43095, 1024, 4590, 89, 87, "Output",ExpressionUUID->"e8cf07e3-1e79-4d0f-a43f-eec49e1aac94"]
 }, Open  ]],
-Cell[45738, 1082, 229, 3, 87, "ExampleText",ExpressionUUID->"c96d9158-2022-4b01-af3f-13ccfc7986b9"],
+Cell[47700, 1116, 229, 3, 87, "ExampleText",ExpressionUUID->"29855273-8c5b-4062-ac0a-b349003829c2"],
 Cell[CellGroupData[{
-Cell[45992, 1089, 166, 3, 87, "Input",ExpressionUUID->"fdd355f3-129f-45bc-91c0-ee7c63eefcbd"],
-Cell[46161, 1094, 902, 26, 87, "Output",ExpressionUUID->"1b46d7ec-4a30-4e05-8565-f36ef0d0619d"]
+Cell[47954, 1123, 166, 3, 87, "Input",ExpressionUUID->"717a6098-1afb-4816-ae20-deee21cc1ccb"],
+Cell[48123, 1128, 902, 26, 87, "Output",ExpressionUUID->"f8ef5a9c-9ee9-47a7-b638-805e2d283405"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[47112, 1126, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"c9d4c812-b285-43b0-a303-e7b80545a391"],
-Cell[47198, 1128, 311, 5, 87, "ExampleText",ExpressionUUID->"490c3d6e-d262-465f-8061-54dc13a34d83"],
-Cell[47512, 1135, 1504, 39, 87, "Input",ExpressionUUID->"b0218ee1-0b43-478a-ac5a-49174728064d"],
-Cell[49019, 1176, 1500, 39, 87, "Input",ExpressionUUID->"4518afef-3369-491f-80c4-c37f037e0e3a"],
+Cell[49074, 1160, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"20bbd1cf-c3fb-4849-ab43-0e30932a373f"],
+Cell[49160, 1162, 311, 5, 87, "ExampleText",ExpressionUUID->"8e75e7c7-e17d-4ba4-bfc5-4b95d17eed7e"],
+Cell[49474, 1169, 1504, 39, 87, "Input",ExpressionUUID->"d034171a-f1c8-43c5-9d1e-6f454ac88868"],
+Cell[50981, 1210, 1500, 39, 87, "Input",ExpressionUUID->"619f0c77-4b05-4bce-a426-b270632733b0"],
 Cell[CellGroupData[{
-Cell[50544, 1219, 189, 4, 87, "Input",ExpressionUUID->"d7606642-3c7b-4944-89ee-1264869a525c"],
-Cell[50736, 1225, 536, 15, 87, "Output",ExpressionUUID->"863b74dc-954d-407b-9c88-2fd2b63564c6"]
+Cell[52506, 1253, 189, 4, 87, "Input",ExpressionUUID->"6a5ef218-dc76-4c3a-972e-cd64db79b9e7"],
+Cell[52698, 1259, 536, 15, 87, "Output",ExpressionUUID->"a55dff82-6e7e-4119-b753-2af7d8559f90"]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[51309, 1245, 684, 18, 87, "Input",ExpressionUUID->"06ae9640-1658-466d-a3bf-779c419f985d"],
-Cell[51996, 1265, 14308, 258, 87, "Output",ExpressionUUID->"ddd5bfb2-70b7-4991-b22d-152093cfac67"]
+Cell[53271, 1279, 684, 18, 87, "Input",ExpressionUUID->"c2276314-f9c0-42e3-ac72-8fa4d21da2cf"],
+Cell[53958, 1299, 14308, 258, 87, "Output",ExpressionUUID->"00349854-47e3-4dbb-a8b4-5c93943fe86d"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[66353, 1529, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"78fac9d3-4745-4577-90dd-936311b04d9c"],
-Cell[66439, 1531, 373, 5, 87, "ExampleText",ExpressionUUID->"4af6eb47-0979-4504-b874-b3398213b68a"],
-Cell[66815, 1538, 1141, 30, 87, "Input",ExpressionUUID->"c83e0ce1-5749-4f48-8409-5825d7889710"],
-Cell[67959, 1570, 960, 26, 87, "Input",ExpressionUUID->"e2fdd6e7-8330-4fd6-bc3b-c39b2f9389ca"],
-Cell[68922, 1598, 1258, 33, 87, "Input",ExpressionUUID->"1056b37d-c141-4190-86b0-175f353d8212"],
-Cell[70183, 1633, 414, 10, 87, "Input",ExpressionUUID->"08147b9c-696f-4739-bc30-d94611d7df50"],
+Cell[68315, 1563, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"d2156d46-ccad-4095-a01a-2ee2ff7dccab"],
+Cell[68401, 1565, 373, 5, 87, "ExampleText",ExpressionUUID->"cd0bcdc9-fb88-4577-b380-fd80f5621d96"],
+Cell[68777, 1572, 1141, 30, 87, "Input",ExpressionUUID->"2291461b-d70c-4590-a181-72513c24826c"],
+Cell[69921, 1604, 960, 26, 87, "Input",ExpressionUUID->"ca25ac7e-9fd2-4473-a7c0-b30ffc1ac99c"],
+Cell[70884, 1632, 1258, 33, 87, "Input",ExpressionUUID->"c12586a9-3fda-4f9e-bd51-a32de8c2d11f"],
+Cell[72145, 1667, 414, 10, 87, "Input",ExpressionUUID->"c4d8e3fa-8d8e-421e-aa4c-9b238977527f"],
 Cell[CellGroupData[{
-Cell[70622, 1647, 132, 1, 87, "Input",ExpressionUUID->"caf95eb7-b7bb-4568-8cad-522c64fe33c8"],
-Cell[70757, 1650, 1081, 33, 87, "Output",ExpressionUUID->"4aca371c-8efb-4bad-b7cc-0abf7eb43011"]
+Cell[72584, 1681, 132, 1, 87, "Input",ExpressionUUID->"1561b186-fde2-447f-a297-6cc711645bfc"],
+Cell[72719, 1684, 1081, 33, 87, "Output",ExpressionUUID->"1fb50932-a417-497c-85bc-c3dda7f92a92"]
 }, Open  ]],
-Cell[71853, 1686, 124, 0, 87, "ExampleText",ExpressionUUID->"9f9c9054-8bbb-49d8-baf4-86a12572abad"],
+Cell[73815, 1720, 124, 0, 87, "ExampleText",ExpressionUUID->"00f67d7f-7002-4f3a-88df-ae23cb25273d"],
 Cell[CellGroupData[{
-Cell[72002, 1690, 761, 19, 87, "Input",ExpressionUUID->"15f1ba4a-310d-4bec-9699-b1fe4fed03e8"],
-Cell[72766, 1711, 62958, 1460, 87, "Output",ExpressionUUID->"89e17856-b4fd-4f79-805d-fd471abff0c7"]
+Cell[73964, 1724, 761, 19, 87, "Input",ExpressionUUID->"f54d63a5-b329-4833-86b4-6b11992944a5"],
+Cell[74728, 1745, 62958, 1460, 87, "Output",ExpressionUUID->"3f4b8d77-d67f-46a9-adba-6eff3b82f640"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[135773, 3177, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"848b9628-46ef-4bf0-8b74-23aa410857ec"],
-Cell[135859, 3179, 260, 4, 87, "ExampleText",ExpressionUUID->"a76bda1f-cc91-4302-98be-09a673cf0786"],
-Cell[136122, 3185, 1174, 33, 87, "Input",ExpressionUUID->"3055511b-4e24-4c94-b62e-038ab86017e4"],
+Cell[137735, 3211, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"ab75ca69-cb05-4c54-8bc3-9b8bbba59201"],
+Cell[137821, 3213, 260, 4, 87, "ExampleText",ExpressionUUID->"894cc9ef-cc78-40f6-b6bc-c0045f39f658"],
+Cell[138084, 3219, 1174, 33, 87, "Input",ExpressionUUID->"09c61a79-e2f3-472d-b0e4-2615650ee458"],
 Cell[CellGroupData[{
-Cell[137321, 3222, 127, 1, 87, "Input",ExpressionUUID->"e4b42730-1d88-4996-83b0-0b2c4cf0e1f9"],
-Cell[137451, 3225, 2395, 59, 87, "Output",ExpressionUUID->"814e078e-db3a-4a87-98f7-03ea07cd9249"]
+Cell[139283, 3256, 127, 1, 87, "Input",ExpressionUUID->"3cb3596f-efcd-4b26-ae3e-6c6e954194f4"],
+Cell[139413, 3259, 2395, 59, 87, "Output",ExpressionUUID->"53ac3658-4811-4137-8020-5d6a85c745b4"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[139895, 3290, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"7be26f68-445e-4d77-bd04-1f073288c5d7"],
-Cell[139981, 3292, 171, 3, 87, "ExampleText",ExpressionUUID->"56a7a1fa-3b2a-4a9a-af0e-e498232015f0"],
+Cell[141857, 3324, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"88964871-c7e7-4fdb-b167-7baeda625517"],
+Cell[141943, 3326, 171, 3, 87, "ExampleText",ExpressionUUID->"6051c4d5-6d47-4c7e-8bdb-0cb9b3f8c112"],
 Cell[CellGroupData[{
-Cell[140177, 3299, 269, 6, 87, "Input",ExpressionUUID->"68cbf08d-9a56-494f-b0d8-de771e565538"],
-Cell[140449, 3307, 882, 23, 87, "Output",ExpressionUUID->"d55f3fb2-6d64-49b1-b36a-1a31e78a1769"]
+Cell[142139, 3333, 269, 6, 87, "Input",ExpressionUUID->"95eeafd8-c81d-425e-b179-f4c9aca216d3"],
+Cell[142411, 3341, 882, 23, 87, "Output",ExpressionUUID->"cf9bb546-faf4-4db1-a669-418cee03aea8"]
 }, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[141380, 3336, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"e5d9a451-410a-4ee6-87a1-fb1085ffbb74"],
-Cell[141466, 3338, 194, 3, 87, "ExampleText",ExpressionUUID->"00bc68b2-47ac-4edf-a98d-eb2debe16bd5"],
+Cell[143342, 3370, 83, 0, 87, "ExampleDelimiter",ExpressionUUID->"2a1d7298-6a37-435d-a5bd-bfd564e9bdbd"],
+Cell[143428, 3372, 194, 3, 87, "ExampleText",ExpressionUUID->"cb87bf09-f84c-40f0-9f80-00454cf3d624"],
 Cell[CellGroupData[{
-Cell[141685, 3345, 465, 12, 87, "Input",ExpressionUUID->"0fee31ef-ed5d-4c67-87d4-defdebc4c527"],
-Cell[142153, 3359, 89, 0, 87, "Output",ExpressionUUID->"7b7aeba7-cdfa-4f21-87c7-94d17dff45b9"]
+Cell[143647, 3379, 465, 12, 87, "Input",ExpressionUUID->"c8b95430-2bc5-46c7-bc43-ac9de6a2ba1b"],
+Cell[144115, 3393, 89, 0, 87, "Output",ExpressionUUID->"249d31c6-4d74-4d06-bd28-c682bc5bcee4"]
 }, Open  ]]
 }, Open  ]]
 }, Open  ]]

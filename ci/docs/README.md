@@ -59,10 +59,14 @@ they would on an installed paclet.
 Notes:
 
 - **Re-running changes the committed notebooks**: timings (`AbsoluteTiming`
-  outputs) and any layout produced through `--randomize-projection` (whose
-  randomness lives in the C++ tools, not WL's `SeedRandom`) will differ
-  between runs. Regenerate deliberately — after a Kernel or upstream change
-  that affects outputs — and review the diff, not habitually.
+  outputs), every 3D embedding, every full (level 6) simplification, and
+  any `"randomize-bends"` layout will differ between runs. The generators set
+  `SetOptions[..., RandomSeeding -> Inherited]` (since Knoodle 1.2), so each
+  example's `SeedRandom` now also pins the C++ tools' random *projections*;
+  what stays unseeded is OrthoDraw's bend randomization, inside Reapr and in
+  2D alike (Knoodle `handoff/seedable-simplifier-randomness`). Regenerate
+  deliberately — after a Kernel or upstream change that affects outputs —
+  and review the diff, not habitually.
 - `gen-knoodledraw-nb.wls` also exports each graphical example output as a
   PNG under `$TemporaryDirectory/knoodle-doc-review/` for eyeballing.
 - After regenerating, validate with
