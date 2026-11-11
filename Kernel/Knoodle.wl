@@ -29,8 +29,8 @@ object that KnoodleDraw can render directly. input accepts the same representati
 KnoodleDraw. Option \"SimplifyLevel\" (Automatic, knoodlesimplify's own default) sets the \
 simplification effort: 0 none, 1-3 local-only Reidemeister tiers (I; I+II; all local \
 moves), 4 path rerouting, 5 adds summand detection, 6+ (= Automatic) the full Reapr \
-pipeline. \"RandomizeProjection\" (True) applies a random shear before \
-projecting 3D input, as in KnoodleDraw. \"Unite\" (False, i.e. the default \"split\" shape) \
+pipeline. \"RandomizeProjection\" (True) applies a random rotation to 3D \
+input before projecting it, as in KnoodleDraw. \"Unite\" (False, i.e. the default \"split\" shape) \
 controls the output shape for composite/split links: False gives one diagram per \
 diagrammatically-prime factor (same-colored factors share a link component -- the natural \
 input for KnoodleIdentify on a composite knot); True connect-sums same-colored factors back \
@@ -964,8 +964,9 @@ KnoodleDraw::baddim =
    colors -- the physical link components, shared across all summands, so
    a knot's connect-sum factors all draw in one color; with older binaries
    the legend falls back to per-summand component runs.
-   "RandomizeProjection" (True by default): apply a random shear before
-   projecting 3D geometry to a diagram. The default projection is straight
+   "RandomizeProjection" (True by default): apply a uniformly random rotation
+   to 3D geometry before projecting it to a diagram (Knoodle >= 1.2; earlier
+   versions applied a random shear). The default projection is straight
    down the z axis, which can degenerate on vertical/coplanar segments,
    so this defaults on; set to False to get the plain z-axis projection
    (e.g. for reproducibility). Only meaningful for 3D input read from stdin

@@ -254,7 +254,7 @@ or point counts.
 randomness live in the `knoodledraw` *process*, not in the WL kernel, so the
 paclet has no handle on them: three calls under one `SeedRandom[21]` gave
 27-, 23-, and 25-vertex trefoils. `"RandomizeProjection" -> False` does not
-help either — it suppresses the *projection* shear, which is a different knob
+help either — it suppresses the *projection* rotation, which is a different knob
 from Reapr's permutation and `--embedding`'s rotation (measured: 23 vs 25
 vertices with the flag off). So, unlike the 2D path — where
 `"RandomizeProjection" -> False` *is* fully reproducible, verified by hashing
