@@ -46,6 +46,13 @@ cp -R "$REPO/Resources/ExampleData" "$STAGE/Resources/ExampleData"
 cp "$BIN/"* "$STAGE/Resources/$SID/"
 chmod +x "$STAGE/Resources/$SID/"* 2>/dev/null || true
 cp "$KND/data/Klut/"Klut_Keys_*.bin "$KND/data/Klut/"Klut_Values_*.tsv "$STAGE/Resources/Klut/"
+# The manifest (Knoodle after v1.1.0) must travel with the tables:
+# knoodleidentify checks them against it on every run.
+if [ -f "$KND/data/Klut/Klut_Manifest.txt" ]; then
+  cp "$KND/data/Klut/Klut_Manifest.txt" "$STAGE/Resources/Klut/"
+fi
+echo "== checking the staged KLUT tables =="
+bash "$REPO/ci/check-klut.sh" "$STAGE/Resources/Klut" "$STAGE/Resources/$SID/knoodleidentify"
 
 echo "== building .paclet (local Wolfram license) =="
 PACLET=$(wolframscript -file "$REPO/ci/package-paclet.wls" "$STAGE" "$OUT" | tail -1)

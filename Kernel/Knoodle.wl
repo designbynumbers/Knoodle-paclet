@@ -69,12 +69,16 @@ returning an Association from each distinct prime knot summand (a KnotSymbol[...
 multiplicity in the connect-sum decomposition -- e.g. <|KnotSymbol[3,1,True,\"e/r\"]->2|> \
 for the square knot. input accepts the same representations as KnoodleDraw (including a \
 PlanarDiagramComplex from KnoodleSimplify). A summand outside the table appears as \
-Unidentified[n,pd] (n>13, over the table range) or NotFound[n,pd] (n<=13, unresolved even \
-after escalation -- suspicious); an unknot gives <||>. Multi-component (link) input fails \
+Unidentified[n,pd] (n over the lookup range: 13, or \"MaxCrossings\") or NotFound[n,pd] \
+(n within the range, yet unresolved even after escalation -- suspicious, so it also issues a \
+KnoodleIdentify::notfound warning); an unknot gives <||>. Multi-component (link) input fails \
 with $Failed and a message -- KnoodleIdentify only identifies knots; use KnoodleSimplify with \
 \"Unite\"->True first if the components should be connect-summed into one knot. Option \
 \"MaxCrossings\" (Automatic, knoodleidentify's own default of 13) restricts lookup to \
-subtables up to that many crossings.";
+subtables up to that many crossings; a summand with more comes back Unidentified. If \
+knoodleidentify itself fails -- for instance its KLUT tables are missing, damaged or from \
+another table set -- the result is $Failed with a KnoodleIdentify::knoodletool message \
+quoting its error.";
 
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
@@ -85,32 +89,58 @@ Begin["`Private`"];
    The CLI executables (per SystemID) and the KLUT lookup tables
    (Klut_Keys_NN.bin / Klut_Values_NN.tsv) are declared as "Asset" extensions
    in PacletInfo.wl and located by name via AssetLocation -- no hard-coded
-   paths, with the right per-platform binary selected automatically. When this
-   package is loaded straight from the source checkout (where those assets
-   resolve to files that don't exist yet), each lookup falls back to the
-   sibling Knoodle repo's build tree, so ordinary development keeps working. *)
+   paths, with the right per-platform binary selected automatically.
+
+   When this package is loaded straight from the source checkout (where those
+   assets resolve to files that don't exist yet), each lookup falls back to a
+   Knoodle build tree, so ordinary development keeps working: $KNOODLE_DEV_ROOT
+   if set, else ~jasoncantarella/Knoodle. Only a source checkout falls back --
+   one with ci/build-paclet.sh beside Kernel/. An installed paclet with an
+   asset missing (a damaged install, or a platform it has no binaries for)
+   says so and fails, instead of quietly running whatever tools or KLUT tables
+   happen to sit at the fallback path. *)
 $knoodlePaclet := PacletObject["Knoodle"];
 
-(* AssetLocation for `name`, or `fallback` if unresolved/absent (dev checkout). *)
-assetOr[name_String, fallback_String] :=
+(* Recorded at load time: $InputFileName is this file only while it loads. *)
+$knoodleSourceRoot = If[StringQ[$InputFileName] && $InputFileName =!= "",
+   ParentDirectory[DirectoryName[$InputFileName]], None];
+$knoodleDevQ = StringQ[$knoodleSourceRoot] &&
+   FileExistsQ[FileNameJoin[{$knoodleSourceRoot, "ci", "build-paclet.sh"}]];
+$knoodleDevRoot := Replace[Environment["KNOODLE_DEV_ROOT"],
+   Except[s_String /; s =!= ""] -> "/Users/jasoncantarella/Knoodle"];
+
+General::knoodleasset =
+  "The Knoodle paclet has no `1` asset on this system (`2`): the installation is \
+damaged, or has no binaries for this platform. Reinstall the paclet; to develop \
+against a Knoodle build tree, load the paclet from its source checkout and set the \
+environment variable KNOODLE_DEV_ROOT to the Knoodle repo.";
+
+(* AssetLocation for `name`; in a source checkout, `devPath` if unresolved or
+   absent; otherwise a General::knoodleasset message and $Failed. *)
+assetOr[name_String, devPath_String] :=
   With[{loc = Quiet @ $knoodlePaclet["AssetLocation", name]},
-    If[StringQ[loc] && (FileExistsQ[loc] || DirectoryQ[loc]), loc, fallback]];
+    Which[
+      StringQ[loc] && (FileExistsQ[loc] || DirectoryQ[loc]), loc,
+      TrueQ[$knoodleDevQ], devPath,
+      True, Message[General::knoodleasset, name, $SystemID]; $Failed]];
 
 (* The Windows Asset maps "knoodledraw" -> "knoodledraw.exe", so callers always
    ask for the bare tool name and get the right file for this platform. *)
-exe[name_String] := assetOr[name, FileNameJoin[{"/Users/jasoncantarella/Knoodle/tools", name}]];
+exe[name_String] := assetOr[name, FileNameJoin[{$knoodleDevRoot, "tools", name}]];
 
-$KnoodleDataDirectory := assetOr["KlutData", "/Users/jasoncantarella/Knoodle/data/Klut"];
+$KnoodleDataDirectory := assetOr["KlutData", FileNameJoin[{$knoodleDevRoot, "data", "Klut"}]];
 
-$KnoodleBinaryDirectory := DirectoryName[exe["knoodledraw"]];
+$KnoodleBinaryDirectory := Replace[exe["knoodledraw"], s_String :> DirectoryName[s]];
 
 (* Paclet archives (zip) don't reliably preserve the executable bit, so restore
    it once, at load time, for the bundled binaries. No-op on Windows; harmless
    on a dev checkout (already +x). Failures are ignored so a read-only install
-   location can't break loading. *)
+   location can't break loading, and a missing binary is reported when it is
+   first used, not here. *)
 If[$OperatingSystem =!= "Windows",
-  Quiet @ Run["chmod +x " <> StringRiffle[
-     ("\"" <> exe[#] <> "\"") & /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify"}, " "]]];
+  With[{bins = Select[Quiet[exe /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify"},
+       General::knoodleasset], StringQ]},
+    If[bins =!= {}, Quiet @ Run["chmod +x " <> StringRiffle[("\"" <> # <> "\"") & /@ bins, " "]]]]];
 
 (* ---- child process environment ------------------------------------------
    Every tool invocation goes through runTool, which pins HOME to a scratch
@@ -143,8 +173,57 @@ $childEnv := ($childEnv = Append[Association[GetEnvironment[]], "HOME" -> $knood
 
 (* The single door to the CLI tools; takes RunProcess's own argument forms
    (command / command+property / command+property+input). Centralized so a new
-   call site cannot forget the environment. *)
-runTool[cmd_List, rest___] := RunProcess[cmd, rest, ProcessEnvironment -> $childEnv];
+   call site cannot forget the environment. A command holding a non-string --
+   $Failed from exe[] for a missing asset, already reported -- runs nothing. *)
+runTool[cmd_List, rest___] := If[AllTrue[cmd, StringQ],
+   RunProcess[cmd, rest, ProcessEnvironment -> $childEnv], $Failed];
+
+(* ---- checked runs ----
+   The tools exit nonzero when anything goes wrong, and then withhold their
+   output or mark it unreliable (Knoodle's fail-loud contract: a library error
+   can otherwise leave a quietly truncated result). runChecked returns a tool's
+   standard output when it exits 0. Otherwise it issues sym::knoodletool,
+   quoting the tool's own error lines, and returns $Failed -- never the partial
+   output. *)
+General::knoodletool = "`1` failed (exit status `2`). `3`";
+
+(* The Error:/ERROR: lines in some tool output. *)
+toolErrorLines[text_String] := Select[StringTrim /@ StringSplit[text, "\n"],
+   StringStartsQ[#, "Error:" | "ERROR:"] &];
+
+(* What a failed run said, as one string: its Error:/ERROR: lines --
+   knoodlesimplify --streaming-mode writes those to a run log, not stderr, and
+   names the log on stderr, so look there too -- or, with none, the last few
+   lines of stderr; then the diagnostic report's path, if there is one. *)
+toolFailureText[stderr_String] := Module[{lines, logs, errs, report},
+  lines = Select[StringTrim /@ StringSplit[stderr, "\n"], # =!= "" &];
+  logs = StringCases[stderr, "(run log: " ~~ p : Except["\n" | ")"] .. ~~ ")" :> p];
+  errs = Join[toolErrorLines[stderr],
+     Join @@ (toolErrorLines[Replace[Quiet @ Import[#, "Text"], Except[_String] -> ""]] & /@
+        Select[logs, FileExistsQ])];
+  If[errs === {},
+   errs = Select[lines, ! StringStartsQ[#, "Wrote a diagnostic report" | "(run log:"] &];
+   errs = Take[errs, -Min[3, Length[errs]]]];
+  If[Length[errs] > 6, errs = Append[Take[errs, 6], "(" <> ToString[Length[errs] - 6] <> " more)"]];
+  report = StringCases[stderr, "Wrote a diagnostic report to " ~~ p : Except["\n"] .. ~~ " -- " :> p];
+  StringRiffle[Join[errs,
+     If[report === {}, {}, {"Diagnostic report: " <> First[report]}]], "\n"]
+];
+
+(* RunProcess's whole result (ExitCode, StandardOutput, StandardError), or
+   $Failed if the tool could not be run (RunProcess or exe[] said why). *)
+runResult[cmd_List, input___] := Replace[runTool[cmd, All, input], Except[_Association] -> $Failed];
+
+toolFailed[sym_Symbol, cmd_List, r_Association] := (
+  Message[MessageName[sym, "knoodletool"], FileBaseName[First[cmd]], r["ExitCode"],
+    toolFailureText[r["StandardError"]]];
+  $Failed);
+
+runChecked[sym_Symbol, cmd_List, input___] := With[{r = runResult[cmd, input]},
+  Which[
+    r === $Failed, $Failed,
+    r["ExitCode"] === 0, r["StandardOutput"],
+    True, toolFailed[sym, cmd, r]]];
 
 (* Square grid spacing requested from knoodledraw (see runGeometry). One grid
    square is this many coordinate units. Rendering follows DRAWING-SPEC.md,
@@ -195,18 +274,23 @@ runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False, embeddingQ_ : 
   drawFlags = If[TrueQ[embeddingQ], {"--embedding"},
      {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]}];
   randFlag = If[TrueQ[randomizeQ], {"--randomize-projection"}, {}];
+  (* Each step goes through runChecked: a failed simplify or draw is
+     KnoodleDraw::knoodletool and $Failed, never a partial drawing. *)
   tsv = Which[
      TrueQ[simplify] && Head[in] === File,
       Module[{outFile = tempFile["knoodle-simplified-", ".tsv"]},
-       runTool[Join[{exe["knoodlesimplify"], "--output=" <> outFile}, randFlag, {First[in]}]];
-       Import[outFile, "Text"]],
+       If[runChecked[KnoodleDraw,
+           Join[{exe["knoodlesimplify"], "--output=" <> outFile}, randFlag, {First[in]}]] === $Failed,
+        $Failed, Import[outFile, "Text"]]],
      TrueQ[simplify],
-      runTool[Join[{exe["knoodlesimplify"], "--streaming-mode"}, randFlag], "StandardOutput", in],
+      runChecked[KnoodleDraw, Join[{exe["knoodlesimplify"], "--streaming-mode"}, randFlag], in],
      Head[in] === File, None,  (* draw directly from the file, no simplify step *)
      True, in];
+  If[tsv === $Failed, Return[$Failed]];
   out = If[tsv === None,
-     runTool[Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag, {First[in]}], "StandardOutput"],
-     runTool[Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag], "StandardOutput", tsv]];
+     runChecked[KnoodleDraw, Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag, {First[in]}]],
+     runChecked[KnoodleDraw, Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag], tsv]];
+  If[out === $Failed, Return[$Failed]];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
 
@@ -220,10 +304,11 @@ runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False, embeddingQ_ : 
    step rather than also drawing. *)
 runSimplifyPdc[in_, extraFlags_List] := If[Head[in] === File,
    Module[{outFile = tempFile["knoodle-pdc-", ".txt"]},
-    runTool[Join[{exe["knoodlesimplify"], "--format=pdc", "--output=" <> outFile}, extraFlags, {First[in]}]];
-    Import[outFile, "Text"]],
-   runTool[Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags],
-     "StandardOutput", in]
+    If[runChecked[KnoodleSimplify,
+        Join[{exe["knoodlesimplify"], "--format=pdc", "--output=" <> outFile}, extraFlags, {First[in]}]] === $Failed,
+     $Failed, Import[outFile, "Text"]]],
+   runChecked[KnoodleSimplify,
+     Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags], in]
 ];
 
 (* ---- KnotTheory-format output ("OutputFormat" -> "KnotTheory") ----
@@ -935,6 +1020,8 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[
      {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}]];
   geos = runGeometry[tsv, simp, Join[toCliFlags[OptionValue["LayoutOptions"]], extFlag],
     TrueQ[OptionValue["RandomizeProjection"]], embedQ];
+  (* A failed run has already said why (KnoodleDraw::knoodletool). *)
+  If[geos === $Failed, Return[$Failed]];
   If[embedQ,
    (* <|"Components" -> {}|> is the embedding's analogue of "produced no
       geometry" -- emitted per knot so the stream stays line-aligned. *)
@@ -1014,6 +1101,8 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
   extraFlags = toCliFlags[OptionValue["SimplifyOptions"]];
   serialized = runSimplifyPdc[tsv,
     Join[levelFlag, randFlag, uniteFlag, maxReaprFlag, compactionFlag, energyFlag, extraFlags]];
+  (* A failed run has already said why (KnoodleSimplify::knoodletool). *)
+  If[serialized === $Failed, Return[$Failed]];
   (* Empty output means the tool bailed (degenerate/self-intersecting
      geometry, invalid diagram): say so rather than returning a quietly
      empty complex. A genuine unknot is NOT empty ("u <color>" line). *)
@@ -1030,11 +1119,30 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
    Unlike knoodlesimplify/knoodledraw, knoodleidentify has no --streaming-mode
    flag (it reads stdin directly whenever no file argument is given), so this
    is simpler than runSimplifyPdc/runGeometry: just the same
-   File[...]-vs-stdin dispatch. *)
-runIdentify[in_, extraFlags_List] := Module[{dataFlag = {"--data-dir=" <> $KnoodleDataDirectory}},
-   If[Head[in] === File,
-     runTool[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags, {First[in]}], "StandardOutput"],
-     runTool[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags], "StandardOutput", in]]
+   File[...]-vs-stdin dispatch.
+
+   Checked like the others, with one exception. knoodleidentify also exits
+   nonzero when a summand comes back NotFound (within the table range, yet
+   unresolved after Reapr: a table gap or a hard simplification case), but its
+   answer is complete and keeps those summands as NotFound[n, pd]. When every
+   error line it printed is one of those, return the answer with a
+   KnoodleIdentify::notfound warning. Anything else -- a KLUT table that is
+   missing, damaged or from another table set, a library error -- is
+   KnoodleIdentify::knoodletool and $Failed. *)
+notFoundLineQ[line_String] := StringStartsQ[line, "Error:"] &&
+   StringEndsQ[line, "table gap or a hard simplification case?"];
+
+runIdentify[in_, extraFlags_List] := Module[{dir = $KnoodleDataDirectory, cmd, r, errs},
+   If[! StringQ[dir], Return[$Failed]];
+   cmd = Join[{exe["knoodleidentify"], "--data-dir=" <> dir}, extraFlags];
+   r = If[Head[in] === File, runResult[Append[cmd, First[in]]], runResult[cmd, in]];
+   If[r === $Failed, Return[$Failed]];
+   If[r["ExitCode"] === 0, Return[r["StandardOutput"]]];
+   errs = toolErrorLines[r["StandardError"]];
+   If[errs =!= {} && AllTrue[errs, notFoundLineQ],
+    Message[KnoodleIdentify::notfound, Length[errs]];
+    r["StandardOutput"],
+    toolFailed[KnoodleIdentify, cmd, r]]
 ];
 
 KnoodleIdentify::badinput = "`1` is not a recognized knot/link input.";
@@ -1045,6 +1153,10 @@ connect-summed into one knot.";
 KnoodleIdentify::failed =
   "knoodleidentify produced no result for this input (a degenerate projection or an \
 invalid diagram).";
+KnoodleIdentify::notfound =
+  "`1` summand(s) came back NotFound: within the table's crossing range, yet still \
+unidentified after simplification. That points to a gap in the KLUT tables or a hard \
+simplification case; the result keeps them as NotFound[n, pd].";
 (* "MaxCrossings": knoodleidentify's --max-crossings (Automatic = its own
    default, 13). "RandomizeProjection": as in KnoodleDraw/KnoodleSimplify --
    randomly rotate 3D geometry before projecting (the flag reached

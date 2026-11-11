@@ -57,11 +57,16 @@ sum, so it is simply omitted."],
    notes["input accepts the same representations as KnoodleDraw. The lookup \
 is self-contained: it decomposes and simplifies internally, so input need not \
 be simplified first."],
-   notes["A summand with more crossings than the lookup table covers comes \
-back as Unidentified[n, pd] -> multiplicity, where pd is the summand's own \
-signed PD code, for offline analysis. A summand inside the table's range \
-that still fails to resolve comes back as NotFound[n, pd] -> multiplicity \
-instead."],
+   notes["A summand with more crossings than the lookup covers (the table's \
+13, or \"MaxCrossings\") comes back as Unidentified[n, pd] -> multiplicity, \
+where pd is the summand's own signed PD code, for offline analysis. A summand \
+inside the lookup range that still fails to resolve comes back as \
+NotFound[n, pd] -> multiplicity instead, with a KnoodleIdentify::notfound \
+warning: it points to a gap in the tables or a hard simplification case."],
+   notes["If knoodleidentify itself fails -- for instance because its KLUT \
+tables are missing, damaged or from another table set -- KnoodleIdentify \
+returns $Failed with a KnoodleIdentify::knoodletool message quoting the \
+tool's error."],
    notes["KnoodleIdentify only identifies knots. A genuine link (more than \
 one component) fails with $Failed and a KnoodleIdentify::link message; apply \
 KnoodleSimplify with \"Unite\" -> True first if the components should be \
@@ -77,7 +82,7 @@ KnoodleIdentify::failed message."],
       optRow[ToBoxes["MaxCrossings"], "Automatic",
        "restrict the lookup to subtables with at most this many crossings \
 (3 to 13); Automatic is the table's full range. Knots above a restricted \
-range come back as NotFound."],
+range come back as Unidentified."],
       optRow[ToBoxes["RandomizeProjection"], "True",
        "randomly rotate 3D input before projecting, avoiding degenerate \
 projections; set False for reproducibility"]
@@ -176,8 +181,8 @@ is sampled as a space curve:"],
 SeedRandom[42];
 ex7 = {
    delim,
-   text["Restricting \"MaxCrossings\" below a knot's crossing number forces \
-a NotFound result:"],
+   text["Restricting \"MaxCrossings\" below a knot's crossing number leaves \
+it Unidentified:"],
    group[HoldForm[KnoodleIdentify[Knot[5, 1], "MaxCrossings" -> 3]]]};
 
 ex8 = {
