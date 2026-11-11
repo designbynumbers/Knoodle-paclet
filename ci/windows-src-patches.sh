@@ -49,4 +49,22 @@ apply () {  # description  file  sed-expr  match-pattern
 #     (The compiler-rt builtins link in ci/build-tools.sh is NOT a src patch and
 #     stays: Int128 <-> double conversions still need it on Windows.)
 
-echo "=== no temporary Windows src patches needed ==="
+# --- Active (SCRATCH CI branch -- do not merge) ---------------------------------
+# Test the Tools fix for OutString's std::filesystem::path printer (path::c_str()
+# is const wchar_t * on Windows) before it goes to Henrik: check out the fork
+# commit in the nested Tools submodule, and insist that it is exactly one commit
+# on top of the Tools that the Knoodle v1.2.0 pin carries.
+TOOLS_PR_SHA=35179be81e3e33d0b955f792ce8348802ec3f2c1
+T="$KND/submodules/Tensors/submodules/Tools"
+echo ">> SCRATCH: Tools -> designbynumbers/Tools windows-path-outstring ($TOOLS_PR_SHA)"
+base=$(git -C "$T" rev-parse HEAD)
+git -C "$T" fetch -q https://github.com/designbynumbers/Tools.git windows-path-outstring
+git -C "$T" checkout -q FETCH_HEAD
+if [ "$(git -C "$T" rev-parse HEAD)" != "$TOOLS_PR_SHA" ]; then
+  echo "   !! the fork branch moved: $(git -C "$T" rev-parse HEAD)" >&2; exit 1
+fi
+if [ "$(git -C "$T" rev-parse HEAD^)" != "$base" ]; then
+  echo "   !! the fix is not on top of the pinned Tools ($base)" >&2; exit 1
+fi
+echo "   pinned Tools $base + fix $TOOLS_PR_SHA"
+echo "=== temporary Windows src patches applied ==="
