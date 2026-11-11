@@ -39,5 +39,14 @@ apply () {  # description  file  sed-expr  match-pattern
 #     it, so it only broke the Windows target. Henrik made the change himself
 #     rather than merging PR #17 -- Bends.hpp:165 is `<int>` upstream, with a
 #     comment recording the constraint. Removed 2026-08-07.
+# P2: Tools src/TypeName.hpp, PrettyTypeName's last branch was a bare `#elif`
+#     where `#else` was meant; clang targeting MSVC reached it and failed with
+#     "expected value in expression". P3: Tools src/ToString.hpp formatted
+#     Int128 with std::format, and MSVC's STL has no std::formatter<__int128>.
+#     Both were carried on the paclet's knoodle-1.1.1 branch and fixed upstream
+#     in Tools PR #5 (the _MSVC_STL_VERSION guard), which Knoodle v1.2.0 pins.
+#     Never on paclet main; retired at the v1.2.0 repin, 2026-11-11.
+#     (The compiler-rt builtins link in ci/build-tools.sh is NOT a src patch and
+#     stays: Int128 <-> double conversions still need it on Windows.)
 
 echo "=== no temporary Windows src patches needed ==="
