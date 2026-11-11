@@ -9,8 +9,11 @@
 # This file is intentionally the single source of truth for "what still needs
 # fixing upstream to build Knoodle on Windows."
 #
-# Currently: nothing. The list is empty and the Windows build compiles against
-# unmodified Knoodle. Keep the harness -- the next portability wart goes here.
+# Currently: nothing. The list is empty, but Knoodle v1.2.0 does NOT build on
+# Windows: Tools' OutString.hpp calls path::c_str() where MSVC's path holds
+# wchar_t. The fix is designbynumbers/Tools PR #6. It is deliberately NOT patched
+# here (JHC, 2026-11-11): the Windows jobs stay red until Henrik merges it and
+# Knoodle 1.2.1 is pinned. Keep the harness -- the next portability wart goes here.
 #
 set -euo pipefail
 KND="${KND:-Knoodle}"

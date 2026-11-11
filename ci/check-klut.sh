@@ -15,8 +15,8 @@
 #     knoodleidentify that runs on this machine, also runs
 #     `knoodleidentify --verify-tables --data-dir=DIR`, which is the tool's own
 #     verdict on the set (and a smoke test of the binary).
-#   - without one (a Knoodle pin from before the manifest): only that all 22
-#     table files are present, non-empty, and not LFS pointers.
+#   - without one: fail. (Knoodle pins before the manifest are no longer
+#     supported; the paclet has pinned Knoodle 1.2.0 or later since paclet 1.2.)
 set -euo pipefail
 
 DIR="${1:?usage: ci/check-klut.sh DIR [KNOODLEIDENTIFY]}"
@@ -30,18 +30,7 @@ sha256() {
 }
 lfs_pointer() { head -c 64 "$1" | grep -q '^version https://git-lfs.github.com/spec/'; }
 
-if [ ! -f "$MAN" ]; then
-  n=0
-  for c in 03 04 05 06 07 08 09 10 11 12 13; do
-    for f in "Klut_Keys_$c.bin" "Klut_Values_$c.tsv"; do
-      [ -s "$DIR/$f" ] || fail "$DIR/$f is missing or empty"
-      lfs_pointer "$DIR/$f" && fail "$DIR/$f is a Git LFS pointer, not a table (run git lfs pull)"
-      n=$((n + 1))
-    done
-  done
-  echo "check-klut: $n table files present in $DIR (no Klut_Manifest.txt at this Knoodle pin, so presence only)"
-  exit 0
-fi
+[ -f "$MAN" ] || fail "$MAN is missing: knoodleidentify would skip its table check"
 
 head -n 3 "$MAN" | grep -qx 'klut-manifest 1' || fail "$MAN is not a version-1 KLUT manifest"
 n=0
