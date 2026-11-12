@@ -1,6 +1,6 @@
 PacletObject[<|
   "Name" -> "Knoodle",
-  "Version" -> "0.9.2",
+  "Version" -> "1.2.1",
   "WolframVersion" -> "13.0+",
   "Description" -> "Knot and link diagram drawing, simplification, and identification, and checking of move traces, powered by the Knoodle CLI tools.",
   "Creator" -> "Jason Cantarella",
