@@ -13,6 +13,7 @@ cache).
 | `gen-knoodledraw-nb.wls` | `KnoodleDraw.nb` |
 | `gen-knoodlesimplify-nb.wls` | `KnoodleSimplify.nb` |
 | `gen-knoodleidentify-nb.wls` | `KnoodleIdentify.nb` |
+| `gen-knoodleprove-nb.wls` | `KnoodleProve.nb` (examples check the traces in `Resources/ExampleData/Traces`) |
 | `gen-knotsymbol-nb.wls` | `KnotSymbol.nb` |
 | `gen-drawpd-gallery.wls` | `Resources/ExampleData/DrawPDGallery/*.png` (assets, not a page) |
 
@@ -71,4 +72,4 @@ Notes:
   PNG under `$TemporaryDirectory/knoodle-doc-review/` for eyeballing.
 - After regenerating, validate with
   `PacletTools`PacletDocumentationBuild["<repo>", "<tmp dir>"]` — expect
-  `SuccessfulFilesCount -> 5`, `FailedFilesCount -> 0`.
+  `SuccessfulFilesCount -> 6`, `FailedFilesCount -> 0`.

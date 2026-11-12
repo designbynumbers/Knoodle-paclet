@@ -75,6 +75,15 @@ Cell[TextData[{
 
 Cell[TextData[{
  Cell[BoxData[
+  ButtonBox["KnoodleProve",
+   BaseStyle->"Link",
+   ButtonData->"paclet:Knoodle/ref/KnoodleProve"]],
+  "InlineGuideFunction",ExpressionUUID->"a1b2c3d4-0002-4a01-9c01-000000000001"],
+ " \[LongDash] check a move trace, and whether it proves its input an unlink"
+}], "GuideText",ExpressionUUID->"a1b2c3d4-0002-4a01-9c01-000000000002"],
+
+Cell[TextData[{
+ Cell[BoxData[
   StyleBox["PlanarDiagramComplex", "InlineFormula"]],
   "InlineFormula",ExpressionUUID->"b336e71e-c5a4-4529-af46-65623fdeac90"],
  " \[LongDash] the simplified-diagram object returned by ",

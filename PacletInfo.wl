@@ -2,7 +2,7 @@ PacletObject[<|
   "Name" -> "Knoodle",
   "Version" -> "0.9.2",
   "WolframVersion" -> "13.0+",
-  "Description" -> "Knot and link diagram drawing, simplification, and identification, powered by the Knoodle CLI tools.",
+  "Description" -> "Knot and link diagram drawing, simplification, and identification, and checking of move traces, powered by the Knoodle CLI tools.",
   "Creator" -> "Jason Cantarella",
   "License" -> "MIT",
   "Extensions" -> {
@@ -15,27 +15,32 @@ PacletObject[<|
       "Assets" -> {
         {"knoodledraw", "knoodledraw"},
         {"knoodlesimplify", "knoodlesimplify"},
-        {"knoodleidentify", "knoodleidentify"}}},
+        {"knoodleidentify", "knoodleidentify"},
+        {"knoodleprove", "knoodleprove"}}},
     {"Asset", "Root" -> "Resources/Windows-x86-64", "SystemID" -> "Windows-x86-64",
       "Assets" -> {
         {"knoodledraw", "knoodledraw.exe"},
         {"knoodlesimplify", "knoodlesimplify.exe"},
-        {"knoodleidentify", "knoodleidentify.exe"}}},
+        {"knoodleidentify", "knoodleidentify.exe"},
+        {"knoodleprove", "knoodleprove.exe"}}},
     {"Asset", "Root" -> "Resources/Linux-x86-64", "SystemID" -> "Linux-x86-64",
       "Assets" -> {
         {"knoodledraw", "knoodledraw"},
         {"knoodlesimplify", "knoodlesimplify"},
-        {"knoodleidentify", "knoodleidentify"}}},
+        {"knoodleidentify", "knoodleidentify"},
+        {"knoodleprove", "knoodleprove"}}},
     (* Platform-independent data: the KLUT lookup tables (a directory asset
        the Kernel passes to knoodleidentify via --data-dir), and the hard-
        unknot example diagrams used by the KnoodleSimplify documentation
-       (Burton et al. 2023, Applebaum et al. 2025 -- see the READMEs there).
+       (Burton et al. 2023, Applebaum et al. 2025 -- see the READMEs there),
+       and the example move traces of the KnoodleProve documentation.
        Unlike the binaries and KLUT data, ExampleData lives in the source
        repo itself and ships with every build. *)
     {"Asset", "Root" -> "Resources", "Assets" -> {
       {"KlutData", "Klut"},
       {"HardUnknots", "ExampleData/HardUnknots"},
       {"VeryHardUnknots", "ExampleData/VeryHardUnknots"},
-      {"DrawPDGallery", "ExampleData/DrawPDGallery"}}}
+      {"DrawPDGallery", "ExampleData/DrawPDGallery"},
+      {"ExampleTraces", "ExampleData/Traces"}}}
   }
 |>]

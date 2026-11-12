@@ -1,9 +1,9 @@
 (* ::Package:: *)
 
 (* Knoodle paclet -- knot/link diagram drawing, simplification, and
-   identification. The heavy lifting is done by the Knoodle CLI tools
-   (knoodledraw / knoodlesimplify / knoodleidentify), which this package drives
-   via RunProcess. The Wolfram side handles representation conversion (KnotData,
+   identification, and checking of move traces. The heavy lifting is done by
+   the Knoodle CLI tools (knoodledraw / knoodlesimplify / knoodleidentify /
+   knoodleprove), which this package drives via RunProcess. The Wolfram side handles representation conversion (KnotData,
    KnotTheory PD/DTCode/GaussCode, 3D curves) and rendering. *)
 
 BeginPackage["Knoodle`"];
@@ -91,6 +91,21 @@ knoodleidentify itself fails -- for instance its KLUT tables are missing, damage
 another table set -- the result is $Failed with a KnoodleIdentify::knoodletool message \
 quoting its error.";
 
+KnoodleProve::usage =
+  "KnoodleProve[trace] checks a move trace -- the record a simplifier writes of the moves \
+it made, each move followed by the diagram it left (Knoodle's move-trace format) -- with \
+knoodleprove, which checks every claim in it that does not depend on a drawing. trace is \
+File[path], a path, or the trace's text as a string. The result is an Association: \
+\"Verdict\" is \"VERIFIED\" when every claim checked out, \"MISMATCH\" when some claim is \
+false, and \"UNCHECKED\" when none is false but some could not be checked; \"Unlink\" is True \
+when the trace ends at the empty diagram and that proves its input an unlink (for a knot, \
+the unknot); \"Claims\" lists the claims, one Association each with keys \"Step\" (the \
+record, or All for the whole trace), \"Claim\", \"Verdict\" (None for a line that only \
+reports) and \"Detail\". A false claim is an answer, not a failure: the result says \
+\"MISMATCH\". A trace knoodleprove cannot read gives $Failed with a \
+KnoodleProve::knoodletool message quoting its error. Option \"CheckExterior\" (False) also \
+checks each record's '#view' claim about the exterior face.";
+
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
 
@@ -149,7 +164,7 @@ $KnoodleBinaryDirectory := Replace[exe["knoodledraw"], s_String :> DirectoryName
    location can't break loading, and a missing binary is reported when it is
    first used, not here. *)
 If[$OperatingSystem =!= "Windows",
-  With[{bins = Select[Quiet[exe /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify"},
+  With[{bins = Select[Quiet[exe /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify", "knoodleprove"},
        General::knoodleasset], StringQ]},
     If[bins =!= {}, Quiet @ Run["chmod +x " <> StringRiffle[("\"" <> # <> "\"") & /@ bins, " "]]]]];
 
@@ -1333,6 +1348,101 @@ KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[
    Message[KnoodleIdentify::link, First[linkCrossings]];
    Return[$Failed]];
   result
+];
+
+(* ---- KnoodleProve ----------------------------------------------------------
+   knoodleprove reads a move-trace stream (Knoodle docs/move-descriptor.md) and
+   writes one line per claim:
+
+     #verify step N CLAIM: VERIFIED (detail)
+     #verify step N CLAIM: MISMATCH -- detail
+     #verify step N CLAIM: UNCHECKED (detail)
+     #verify step N split: 1 crossingless component(s) came free (colours 0)
+     #verify stream unlink: VERIFIED (...)
+
+   CLAIM may hold spaces and parentheses ("disk (V0)", "labels (V2/V3/V5)") but
+   no ": ", so the first ": " ends it. A line with no verdict word only reports
+   (split), and gets "Verdict" -> None.
+
+   It exits 1 on any MISMATCH, and also on a malformed stream or a library
+   error. The first is the answer the caller asked for, so a nonzero exit with
+   a MISMATCH line on stdout and nothing but warnings on stderr is returned as
+   a result; anything else nonzero is KnoodleProve::knoodletool and $Failed.
+   A malformed stream prints "knoodleprove: <where>: trace line N: ..." on
+   stderr, which toolFailureText quotes (it has no "Error:" prefix, so the
+   last lines of stderr are what it shows). An empty stream exits 0 with a
+   warning and no lines; that is KnoodleProve::norecords and $Failed, since
+   nothing was checked.
+
+   Not exposed: --thread-exterior, which rewrites the stream (choosing one
+   exterior face per record) instead of checking it. *)
+(* "(...)" whose first parenthesis closes only at the very end. A redraw's
+   detail nests them: "(rotation x->y->z->x (+2pi/3 about (1,1,1)))". *)
+outerParensQ[t_String] := StringStartsQ[t, "("] && StringEndsQ[t, ")"] &&
+   FreeQ[Most[Accumulate[Replace[Characters[t], {"(" -> 1, ")" -> -1, _ -> 0}, {1}]]], 0];
+
+proveDetail[d_String] := With[{t = StringTrim[d]},
+   Which[
+    outerParensQ[t], StringTake[t, {2, -2}],
+    StringStartsQ[t, "--"], StringTrim[StringDrop[t, 2]],
+    True, t]];
+
+proveClaim[line_String] := Replace[
+   StringCases[line,
+    StartOfString ~~ "#verify " ~~ where : ("stream" | ("step " ~~ DigitCharacter ..)) ~~ " " ~~
+      claim : Shortest[__] ~~ ": " ~~ rest___ ~~ EndOfString :> {where, claim, rest}],
+   {
+    {{where_, claim_, rest_}} :> Join[
+      <|"Step" -> If[where === "stream", All, ToExpression[StringDrop[where, 5]]],
+        "Claim" -> claim|>,
+      Replace[StringCases[rest, StartOfString ~~ v : ("VERIFIED" | "MISMATCH" | "UNCHECKED") ~~
+            d___ ~~ EndOfString :> {v, d}], {
+         {{v_, d_}} :> <|"Verdict" -> v, "Detail" -> proveDetail[d]|>,
+         _ :> <|"Verdict" -> None, "Detail" -> StringTrim[rest]|>}]],
+    _ -> Nothing}];
+
+proveClaims[out_String] := proveClaim /@ StringSplit[out, {"\r\n", "\n"}];
+
+(* stderr lines that are more than warnings. *)
+proveStderrErrors[err_String] := Select[StringTrim /@ StringSplit[err, {"\r\n", "\n"}],
+   # =!= "" && ! StringStartsQ[#, "knoodleprove: warning:"] &];
+
+KnoodleProve::badinput =
+  "`1` is not a move trace: give File[path], a path to a trace file, or the trace's text \
+as a string.";
+KnoodleProve::norecords =
+  "The trace has no records, so nothing was checked.";
+KnoodleProve::badopt = "Value of option \"CheckExterior\" -> `1` should be True or False.";
+
+(* A string with no line break that names a file is a path; any other string
+   is the trace's text (a trace always runs to several lines). *)
+proveInput[File[p_String]] := File[ExpandFileName[p]];
+proveInput[s_String /; StringContainsQ[s, "\n"]] := s;
+proveInput[s_String /; FileExistsQ[s]] := File[ExpandFileName[s]];
+proveInput[_] := $Failed;
+
+Options[KnoodleProve] = {"CheckExterior" -> False};
+KnoodleProve[trace_, opts : OptionsPattern[]] := Module[
+  {in = proveInput[trace], ext = OptionValue["CheckExterior"], cmd, r, claims, verdicts},
+  If[in === $Failed, Message[KnoodleProve::badinput, Short[trace]]; Return[$Failed]];
+  If[! BooleanQ[ext], Message[KnoodleProve::badopt, ext]; Return[$Failed]];
+  cmd = Join[{exe["knoodleprove"]}, If[ext, {"--check-exterior"}, {}]];
+  r = If[Head[in] === File, runResult[Append[cmd, First[in]]], runResult[cmd, in]];
+  If[r === $Failed, Return[$Failed]];
+  claims = proveClaims[r["StandardOutput"]];
+  verdicts = Lookup[claims, "Verdict", None];
+  Which[
+   r["ExitCode"] =!= 0 && ! (MemberQ[verdicts, "MISMATCH"] &&
+       proveStderrErrors[r["StandardError"]] === {}),
+    toolFailed[KnoodleProve, cmd, r],
+   claims === {},
+    Message[KnoodleProve::norecords]; $Failed,
+   True,
+    <|"Verdict" -> Which[MemberQ[verdicts, "MISMATCH"], "MISMATCH",
+        MemberQ[verdicts, "UNCHECKED"], "UNCHECKED", True, "VERIFIED"],
+      "Unlink" -> MemberQ[claims, KeyValuePattern[{"Step" -> All, "Claim" -> "unlink",
+           "Verdict" -> "VERIFIED"}]],
+      "Claims" -> claims|>]
 ];
 
 End[];

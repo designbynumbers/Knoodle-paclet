@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build the three Knoodle CLI tools (knoodlesimplify, knoodledraw,
-# knoodleidentify) with clang, cross-platform. No Boost, no UMFPACK, no BLAS —
+# Build the four Knoodle CLI tools (knoodlesimplify, knoodledraw,
+# knoodleidentify, knoodleprove) with clang, cross-platform. No Boost, no UMFPACK, no BLAS —
 # the dependency-free configuration (mirrors Knoodle's
 # tools/compile_without_boost+umfpack.sh), which is what the paclet ships.
 #
@@ -62,7 +62,7 @@ echo "== flags: $STD $OPT $FEAT ${EXTRA:-} ${PLATFORM_FLAGS[*]:-} =="
 echo "== libs:  ${PLATFORM_LIBS[*]:-(none)} =="
 echo
 
-for tool in knoodlesimplify knoodledraw knoodleidentify; do
+for tool in knoodlesimplify knoodledraw knoodleidentify knoodleprove; do
   echo "=== building $tool ==="
   "$CXX" $STD $OPT $FEAT ${EXTRA:-} "${INCLUDES[@]}" "${PLATFORM_FLAGS[@]}" \
     "$KND/tools/$tool.cpp" ${PLATFORM_LIBS[@]+"${PLATFORM_LIBS[@]}"} -o "$OUT/$tool$EXE"
