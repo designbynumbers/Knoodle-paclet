@@ -9,11 +9,8 @@
 # This file is intentionally the single source of truth for "what still needs
 # fixing upstream to build Knoodle on Windows."
 #
-# Currently: nothing. The list is empty, but Knoodle v1.2.0 does NOT build on
-# Windows: Tools' OutString.hpp calls path::c_str() where MSVC's path holds
-# wchar_t. The fix is designbynumbers/Tools PR #6. It is deliberately NOT patched
-# here (JHC, 2026-11-11): the Windows jobs stay red until Henrik merges it and
-# Knoodle 1.2.1 is pinned. Keep the harness -- the next portability wart goes here.
+# Currently: nothing. Knoodle v1.2.1 builds on Windows as it is. Keep the
+# harness -- the next portability wart goes here.
 #
 set -euo pipefail
 KND="${KND:-Knoodle}"
@@ -49,6 +46,12 @@ apply () {  # description  file  sed-expr  match-pattern
 #     Both were carried on the paclet's knoodle-1.1.1 branch and fixed upstream
 #     in Tools PR #5 (the _MSVC_STL_VERSION guard), which Knoodle v1.2.0 pins.
 #     Never on paclet main; retired at the v1.2.0 repin, 2026-11-11.
+# (Never a patch) Tools src/OutString.hpp passed path::c_str() as a char string,
+#     but MSVC's path holds wchar_t, so Knoodle v1.2.0 did not build on Windows.
+#     Deliberately NOT patched here (JHC, 2026-11-11): the Windows jobs stayed red
+#     until Henrik merged the fix, designbynumbers/Tools PR #6 (Tools 00b58fa).
+#     Knoodle v1.2.1 pins it; Windows is green again from the v1.2.1 repin,
+#     2026-11-12.
 #     (The compiler-rt builtins link in ci/build-tools.sh is NOT a src patch and
 #     stays: Int128 <-> double conversions still need it on Windows.)
 

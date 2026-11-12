@@ -12,8 +12,8 @@ proof.
 Nothing in Knoodle writes a trace yet. These five were recorded by the
 simplifier of the *middlestrands* project, which is built on Knoodle; the
 `#comment` lines at the top of each file say how. They are copies of test
-fixtures in Knoodle v1.2.0 (`test/<name>.trace`), and are bundled as example
-data for the `KnoodleProve` documentation.
+fixtures in Knoodle (`test/<name>.trace`; the same in v1.2.0 and v1.2.1), and
+are bundled as example data for the `KnoodleProve` documentation.
 
 | File | What it is | Moves | Checked |
 |---|---|---|---|

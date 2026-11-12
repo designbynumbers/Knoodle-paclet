@@ -310,7 +310,10 @@ counts, colors, and topology; never on coordinates or point counts.
 reaches Reapr's own engine but not the OrthoDraw layout inside it, which seeds
 itself from `std::random_device`: two `knoodledraw --embedding --seed=7` runs on
 one trefoil gave 26 and 20 vertices (measured 2026-11-11). The CLI help says
-so ("except Reapr's bend randomization under --embedding"). By contrast, an
+so: since Knoodle 1.2.1 it lists what `--seed` cannot reach, "the layout's own
+random choices", namely `--randomize-bends`, `--randomize-virtual-edges`, and
+the layout inside every `--embedding` run. (1.2.0's help named only the
+`--embedding` case.) By contrast, an
 unsimplified random projection *does* repeat under a fixed seed (verified:
 three `-s=0 --projection=random --seed=5` runs on a 200-gon, identical
 output), so 2D drawings of `"Simplify" -> False` input are reproducible with
@@ -496,8 +499,8 @@ and complicated diagrams.
   regenerations, even though the generators now pass a seed: `--seed` does
   not reach OrthoDraw's bend randomization in 2D either (three
   `--randomize-bends=4 --seed=5` runs on one trefoil, three different
-  drawings; checked 2026-11-11 on 1.2.0 — the CLI help names only the
-  `--embedding` case as an exception).
+  drawings; checked 2026-11-11 on 1.2.0. Since 1.2.1 the CLI help names
+  this case too; 1.2.0's named only `--embedding`).
 
 ## Example
 
