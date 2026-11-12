@@ -1,9 +1,9 @@
 (* ::Package:: *)
 
 (* Knoodle paclet -- knot/link diagram drawing, simplification, and
-   identification. The heavy lifting is done by the Knoodle CLI tools
-   (knoodledraw / knoodlesimplify / knoodleidentify), which this package drives
-   via RunProcess. The Wolfram side handles representation conversion (KnotData,
+   identification, and checking of move traces. The heavy lifting is done by
+   the Knoodle CLI tools (knoodledraw / knoodlesimplify / knoodleidentify /
+   knoodleprove), which this package drives via RunProcess. The Wolfram side handles representation conversion (KnotData,
    KnotTheory PD/DTCode/GaussCode, 3D curves) and rendering. *)
 
 BeginPackage["Knoodle`"];
@@ -21,7 +21,14 @@ annotates the diagram with 0-based element ids; LabelStyle styles the label text
 Option \"Orientation\" (False) marks each arc's direction with arrowheads. Option \
 \"DrawingDimension\" (2) set to 3 returns a Graphics3D instead: a 3D embedding of the \
 same link, one Tube per link component, colored as the diagram's strands are. The \
-embedding is randomized, so repeated calls give different curves of the same link type.";
+embedding is randomized, so repeated calls give different curves of the same link type; \
+\"EmbeddingGridSize\" (Automatic; n or {nx,ny,nz}) sets the spacing of its grid and \
+\"ReaprEnergy\" (Automatic; \"TV\", \"Height\", \"TV_MCF\") the energy Reapr lays it out \
+with. 3D input is projected to a diagram after a random rotation by default; option \
+\"Projection\" (Automatic) set to \"Z\", \"X\" or \"Y\" projects straight down that axis \
+instead (\"RandomizeProjection\" -> False is the same as \"Z\"), \"ExactInput\" (False) \
+refuses 3D input that cannot be projected exactly, and RandomSeeding (Automatic) seeds \
+the tools' random choices.";
 
 KnoodleSimplify::usage =
   "KnoodleSimplify[input] simplifies a knot or link diagram, returning a PlanarDiagramComplex \
@@ -29,8 +36,9 @@ object that KnoodleDraw can render directly. input accepts the same representati
 KnoodleDraw. Option \"SimplifyLevel\" (Automatic, knoodlesimplify's own default) sets the \
 simplification effort: 0 none, 1-3 local-only Reidemeister tiers (I; I+II; all local \
 moves), 4 path rerouting, 5 adds summand detection, 6+ (= Automatic) the full Reapr \
-pipeline. \"RandomizeProjection\" (True) applies a random shear before \
-projecting 3D input, as in KnoodleDraw. \"Unite\" (False, i.e. the default \"split\" shape) \
+pipeline. \"Projection\" (Automatic), \"RandomizeProjection\" (True), \"ExactInput\" \
+(False), and RandomSeeding (Automatic) control how 3D input is projected and seeded, as in \
+KnoodleDraw. \"Unite\" (False, i.e. the default \"split\" shape) \
 controls the output shape for composite/split links: False gives one diagram per \
 diagrammatically-prime factor (same-colored factors share a link component -- the natural \
 input for KnoodleIdentify on a composite knot); True connect-sums same-colored factors back \
@@ -69,12 +77,34 @@ returning an Association from each distinct prime knot summand (a KnotSymbol[...
 multiplicity in the connect-sum decomposition -- e.g. <|KnotSymbol[3,1,True,\"e/r\"]->2|> \
 for the square knot. input accepts the same representations as KnoodleDraw (including a \
 PlanarDiagramComplex from KnoodleSimplify). A summand outside the table appears as \
-Unidentified[n,pd] (n>13, over the table range) or NotFound[n,pd] (n<=13, unresolved even \
-after escalation -- suspicious); an unknot gives <||>. Multi-component (link) input fails \
+Unidentified[n,pd] (n over the lookup range: 13, or \"MaxCrossings\") or NotFound[n,pd] \
+(n within the range, yet unresolved even after escalation -- suspicious, so it also issues a \
+KnoodleIdentify::notfound warning); an unknot gives <||>. Multi-component (link) input fails \
 with $Failed and a message -- KnoodleIdentify only identifies knots; use KnoodleSimplify with \
 \"Unite\"->True first if the components should be connect-summed into one knot. Option \
 \"MaxCrossings\" (Automatic, knoodleidentify's own default of 13) restricts lookup to \
-subtables up to that many crossings.";
+subtables up to that many crossings; a summand with more comes back Unidentified. \
+\"Projection\", \"RandomizeProjection\", \"ExactInput\", and RandomSeeding apply to 3D \
+input as in KnoodleDraw, and \"IdentifyOptions\" ({}) forwards further knoodleidentify \
+flags, e.g. {\"escalation-rounds\"->6}. If \
+knoodleidentify itself fails -- for instance its KLUT tables are missing, damaged or from \
+another table set -- the result is $Failed with a KnoodleIdentify::knoodletool message \
+quoting its error.";
+
+KnoodleProve::usage =
+  "KnoodleProve[trace] checks a move trace -- the record a simplifier writes of the moves \
+it made, each move followed by the diagram it left (Knoodle's move-trace format) -- with \
+knoodleprove, which checks every claim in it that does not depend on a drawing. trace is \
+File[path], a path, or the trace's text as a string. The result is an Association: \
+\"Verdict\" is \"VERIFIED\" when every claim checked out, \"MISMATCH\" when some claim is \
+false, and \"UNCHECKED\" when none is false but some could not be checked; \"Unlink\" is True \
+when the trace ends at the empty diagram and that proves its input an unlink (for a knot, \
+the unknot); \"Claims\" lists the claims, one Association each with keys \"Step\" (the \
+record, or All for the whole trace), \"Claim\", \"Verdict\" (None for a line that only \
+reports) and \"Detail\". A false claim is an answer, not a failure: the result says \
+\"MISMATCH\". A trace knoodleprove cannot read gives $Failed with a \
+KnoodleProve::knoodletool message quoting its error. Option \"CheckExterior\" (False) also \
+checks each record's '#view' claim about the exterior face.";
 
 $KnoodleBinaryDirectory::usage =
   "$KnoodleBinaryDirectory is the directory holding the knoodle CLI executables.";
@@ -85,32 +115,58 @@ Begin["`Private`"];
    The CLI executables (per SystemID) and the KLUT lookup tables
    (Klut_Keys_NN.bin / Klut_Values_NN.tsv) are declared as "Asset" extensions
    in PacletInfo.wl and located by name via AssetLocation -- no hard-coded
-   paths, with the right per-platform binary selected automatically. When this
-   package is loaded straight from the source checkout (where those assets
-   resolve to files that don't exist yet), each lookup falls back to the
-   sibling Knoodle repo's build tree, so ordinary development keeps working. *)
+   paths, with the right per-platform binary selected automatically.
+
+   When this package is loaded straight from the source checkout (where those
+   assets resolve to files that don't exist yet), each lookup falls back to a
+   Knoodle build tree, so ordinary development keeps working: $KNOODLE_DEV_ROOT
+   if set, else ~jasoncantarella/Knoodle. Only a source checkout falls back --
+   one with ci/build-paclet.sh beside Kernel/. An installed paclet with an
+   asset missing (a damaged install, or a platform it has no binaries for)
+   says so and fails, instead of quietly running whatever tools or KLUT tables
+   happen to sit at the fallback path. *)
 $knoodlePaclet := PacletObject["Knoodle"];
 
-(* AssetLocation for `name`, or `fallback` if unresolved/absent (dev checkout). *)
-assetOr[name_String, fallback_String] :=
+(* Recorded at load time: $InputFileName is this file only while it loads. *)
+$knoodleSourceRoot = If[StringQ[$InputFileName] && $InputFileName =!= "",
+   ParentDirectory[DirectoryName[$InputFileName]], None];
+$knoodleDevQ = StringQ[$knoodleSourceRoot] &&
+   FileExistsQ[FileNameJoin[{$knoodleSourceRoot, "ci", "build-paclet.sh"}]];
+$knoodleDevRoot := Replace[Environment["KNOODLE_DEV_ROOT"],
+   Except[s_String /; s =!= ""] -> "/Users/jasoncantarella/Knoodle"];
+
+General::knoodleasset =
+  "The Knoodle paclet has no `1` asset on this system (`2`): the installation is \
+damaged, or has no binaries for this platform. Reinstall the paclet; to develop \
+against a Knoodle build tree, load the paclet from its source checkout and set the \
+environment variable KNOODLE_DEV_ROOT to the Knoodle repo.";
+
+(* AssetLocation for `name`; in a source checkout, `devPath` if unresolved or
+   absent; otherwise a General::knoodleasset message and $Failed. *)
+assetOr[name_String, devPath_String] :=
   With[{loc = Quiet @ $knoodlePaclet["AssetLocation", name]},
-    If[StringQ[loc] && (FileExistsQ[loc] || DirectoryQ[loc]), loc, fallback]];
+    Which[
+      StringQ[loc] && (FileExistsQ[loc] || DirectoryQ[loc]), loc,
+      TrueQ[$knoodleDevQ], devPath,
+      True, Message[General::knoodleasset, name, $SystemID]; $Failed]];
 
 (* The Windows Asset maps "knoodledraw" -> "knoodledraw.exe", so callers always
    ask for the bare tool name and get the right file for this platform. *)
-exe[name_String] := assetOr[name, FileNameJoin[{"/Users/jasoncantarella/Knoodle/tools", name}]];
+exe[name_String] := assetOr[name, FileNameJoin[{$knoodleDevRoot, "tools", name}]];
 
-$KnoodleDataDirectory := assetOr["KlutData", "/Users/jasoncantarella/Knoodle/data/Klut"];
+$KnoodleDataDirectory := assetOr["KlutData", FileNameJoin[{$knoodleDevRoot, "data", "Klut"}]];
 
-$KnoodleBinaryDirectory := DirectoryName[exe["knoodledraw"]];
+$KnoodleBinaryDirectory := Replace[exe["knoodledraw"], s_String :> DirectoryName[s]];
 
 (* Paclet archives (zip) don't reliably preserve the executable bit, so restore
    it once, at load time, for the bundled binaries. No-op on Windows; harmless
    on a dev checkout (already +x). Failures are ignored so a read-only install
-   location can't break loading. *)
+   location can't break loading, and a missing binary is reported when it is
+   first used, not here. *)
 If[$OperatingSystem =!= "Windows",
-  Quiet @ Run["chmod +x " <> StringRiffle[
-     ("\"" <> exe[#] <> "\"") & /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify"}, " "]]];
+  With[{bins = Select[Quiet[exe /@ {"knoodledraw", "knoodlesimplify", "knoodleidentify", "knoodleprove"},
+       General::knoodleasset], StringQ]},
+    If[bins =!= {}, Quiet @ Run["chmod +x " <> StringRiffle[("\"" <> # <> "\"") & /@ bins, " "]]]]];
 
 (* ---- child process environment ------------------------------------------
    Every tool invocation goes through runTool, which pins HOME to a scratch
@@ -143,8 +199,57 @@ $childEnv := ($childEnv = Append[Association[GetEnvironment[]], "HOME" -> $knood
 
 (* The single door to the CLI tools; takes RunProcess's own argument forms
    (command / command+property / command+property+input). Centralized so a new
-   call site cannot forget the environment. *)
-runTool[cmd_List, rest___] := RunProcess[cmd, rest, ProcessEnvironment -> $childEnv];
+   call site cannot forget the environment. A command holding a non-string --
+   $Failed from exe[] for a missing asset, already reported -- runs nothing. *)
+runTool[cmd_List, rest___] := If[AllTrue[cmd, StringQ],
+   RunProcess[cmd, rest, ProcessEnvironment -> $childEnv], $Failed];
+
+(* ---- checked runs ----
+   The tools exit nonzero when anything goes wrong, and then withhold their
+   output or mark it unreliable (Knoodle's fail-loud contract: a library error
+   can otherwise leave a quietly truncated result). runChecked returns a tool's
+   standard output when it exits 0. Otherwise it issues sym::knoodletool,
+   quoting the tool's own error lines, and returns $Failed -- never the partial
+   output. *)
+General::knoodletool = "`1` failed (exit status `2`). `3`";
+
+(* The Error:/ERROR: lines in some tool output. *)
+toolErrorLines[text_String] := Select[StringTrim /@ StringSplit[text, "\n"],
+   StringStartsQ[#, "Error:" | "ERROR:"] &];
+
+(* What a failed run said, as one string: its Error:/ERROR: lines --
+   knoodlesimplify --streaming-mode writes those to a run log, not stderr, and
+   names the log on stderr, so look there too -- or, with none, the last few
+   lines of stderr; then the diagnostic report's path, if there is one. *)
+toolFailureText[stderr_String] := Module[{lines, logs, errs, report},
+  lines = Select[StringTrim /@ StringSplit[stderr, "\n"], # =!= "" &];
+  logs = StringCases[stderr, "(run log: " ~~ p : Except["\n" | ")"] .. ~~ ")" :> p];
+  errs = Join[toolErrorLines[stderr],
+     Join @@ (toolErrorLines[Replace[Quiet @ Import[#, "Text"], Except[_String] -> ""]] & /@
+        Select[logs, FileExistsQ])];
+  If[errs === {},
+   errs = Select[lines, ! StringStartsQ[#, "Wrote a diagnostic report" | "(run log:"] &];
+   errs = Take[errs, -Min[3, Length[errs]]]];
+  If[Length[errs] > 6, errs = Append[Take[errs, 6], "(" <> ToString[Length[errs] - 6] <> " more)"]];
+  report = StringCases[stderr, "Wrote a diagnostic report to " ~~ p : Except["\n"] .. ~~ " -- " :> p];
+  StringRiffle[Join[errs,
+     If[report === {}, {}, {"Diagnostic report: " <> First[report]}]], "\n"]
+];
+
+(* RunProcess's whole result (ExitCode, StandardOutput, StandardError), or
+   $Failed if the tool could not be run (RunProcess or exe[] said why). *)
+runResult[cmd_List, input___] := Replace[runTool[cmd, All, input], Except[_Association] -> $Failed];
+
+toolFailed[sym_Symbol, cmd_List, r_Association] := (
+  Message[MessageName[sym, "knoodletool"], FileBaseName[First[cmd]], r["ExitCode"],
+    toolFailureText[r["StandardError"]]];
+  $Failed);
+
+runChecked[sym_Symbol, cmd_List, input___] := With[{r = runResult[cmd, input]},
+  Which[
+    r === $Failed, $Failed,
+    r["ExitCode"] === 0, r["StandardOutput"],
+    True, toolFailed[sym, cmd, r]]];
 
 (* Square grid spacing requested from knoodledraw (see runGeometry). One grid
    square is this many coordinate units. Rendering follows DRAWING-SPEC.md,
@@ -173,6 +278,72 @@ toCliFlags[rules : {___Rule}] := Map[
   List @@@ rules];
 toCliFlags[_] := {};
 
+(* ---- 3D input options shared by all three functions (Knoodle >= 1.2) ----
+   The three tools take the same flags for 3D input, so the three functions
+   take the same options and turn them into flags here:
+
+     "Projection"   --projection: "Z" (the tools' default), "X" or "Y" project
+                    down that axis, exactly; "Random" after a uniformly random
+                    rotation of the whole link. Case is ignored. Automatic
+                    defers to the older "RandomizeProjection" switch: "Random"
+                    when it is True (its default), "Z" when it is False, so
+                    code written for earlier paclets keeps its meaning.
+     "ExactInput"   --exact-input: refuse 3D input that cannot be projected
+                    exactly (floating-point coordinates that do not land on
+                    Knoodle's integer grid, or that "Random" would rotate)
+                    instead of rounding it.
+     RandomSeeding  --seed: Automatic lets each tool draw its own seed;
+                    Inherited draws one from Wolfram's generator, so SeedRandom
+                    governs it; an integer seeds with that integer (mod 2^64);
+                    a string is hashed to one.
+
+   The projection flags go to whichever tool reads the 3D geometry. A PD code
+   is already a diagram: the tools ignore them for it, and so do we. The
+   seed, by contrast, goes to EVERY tool a call runs, and is drawn once per
+   call, so a call that runs knoodlesimplify and then knoodledraw seeds both
+   from one number. A seed repeats a run on the same build of the tools, with
+   one exception that no flag reaches: the bend randomization of the OrthoDraw
+   layout inside Reapr (simplify levels 6+, and "DrawingDimension" -> 3). *)
+General::badproj = "Value of option \"Projection\" -> `1` is not Automatic, \"Z\", \
+\"X\", \"Y\", or \"Random\".";
+General::badseed = "Value of option RandomSeeding -> `1` is not Automatic, Inherited, \
+an integer, or a string.";
+
+$projections = {"z", "x", "y", "random"};
+
+(* {flags} for "Projection"/"RandomizeProjection"/"ExactInput", or $Failed
+   after a sym::badproj message. *)
+inputFlags[sym_Symbol, proj_, randomizeQ_, exactQ_] := Module[{p},
+  p = Which[
+    proj === Automatic, If[TrueQ[randomizeQ], "random", "z"],
+    StringQ[proj] && MemberQ[$projections, ToLowerCase[proj]], ToLowerCase[proj],
+    True, Message[MessageName[sym, "badproj"], ToString[proj, InputForm]]; Return[$Failed]];
+  Join[If[p === "z", {}, {"--projection=" <> p}], If[TrueQ[exactQ], {"--exact-input"}, {}]]];
+
+(* {flags} for RandomSeeding, or $Failed after a sym::badseed message. *)
+seedFlags[sym_Symbol, seeding_] := Replace[seeding, {
+   Automatic -> {},
+   Inherited :> {"--seed=" <> ToString[RandomInteger[2^64 - 1]]},
+   n_Integer :> {"--seed=" <> ToString[Mod[n, 2^64]]},
+   s_String :> {"--seed=" <> ToString[Mod[Hash[s, "SHA256"], 2^64]]},
+   other_ :> (Message[MessageName[sym, "badseed"], ToString[other, InputForm]]; $Failed)}];
+
+(* "ReaprEnergy": Automatic (the tool's default, TV) or one of the energies the
+   bundled binaries are built with. The tools also parse Dirichlet, Bending and
+   TV_CLP, but those need UMFPACK or CLP, which the dependency-free paclet build
+   leaves out; given one, the tool warns on stderr -- which the paclet does not
+   show -- and quietly runs TV instead. So refuse them here, by name. Case
+   is ignored, as the tools ignore it. *)
+General::badenergy = "`1` is not a recognized \"ReaprEnergy\" (\"TV\", \"Height\", or \
+\"TV_MCF\").";
+$reaprEnergies = {"TV", "Height", "TV_MCF"};
+energyFlags[sym_Symbol, energy_] := With[
+  {e = If[StringQ[energy], SelectFirst[$reaprEnergies, ToLowerCase[#] === ToLowerCase[energy] &], Missing[]]},
+  Which[
+   energy === Automatic, {},
+   StringQ[e], {"--reapr-energy=" <> e},
+   True, Message[MessageName[sym, "badenergy"], ToString[energy, InputForm]]; $Failed]];
+
 (* A unique scratch file, e.g. tempFile["knoodle-simplified-", ".tsv"]. *)
 tempFile[prefix_String, extension_String] :=
   FileNameJoin[{$TemporaryDirectory, prefix <> CreateUUID[] <> extension}];
@@ -181,32 +352,33 @@ tempFile[prefix_String, extension_String] :=
    through --streaming-mode, which only reads stdin; knoodlesimplify's file mode
    needs an explicit --output. Draw-from-file likewise takes the path as a
    trailing argument instead of stdin.
-   randomizeQ is --randomize-projection: the default projection is straight
-   down the z axis, which can degenerate on vertical/coplanar segments or (for
-   .kndlxyz) exact coincidental intersections between components. Applied to
-   whichever tool actually reads the geometry -- knoodlesimplify when
-   simplifying first, knoodledraw otherwise -- in both the stdin (single
-   component) and file (multi-component) cases; both now honor the flag.
-   embeddingQ swaps the 2D drawing for knoodledraw's 3D embedding output
-   (--embedding; see the embedding section below) -- the grid flags are
-   2D-only and do not apply to it. *)
-runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False, embeddingQ_ : False] :=
- Module[{tsv, out, drawFlags, randFlag},
-  drawFlags = If[TrueQ[embeddingQ], {"--embedding"},
-     {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]}];
-  randFlag = If[TrueQ[randomizeQ], {"--randomize-projection"}, {}];
+   inFlags are the 3D input flags (--projection, --exact-input; see
+   inputFlags), applied to whichever tool actually reads the geometry --
+   knoodlesimplify when simplifying first, knoodledraw otherwise -- in both
+   the stdin (single component) and file (multi-component) cases. seedFlags
+   (--seed) go to every tool the call runs.
+   drawFlags are knoodledraw's own: the 2D grid, or for an embedding
+   --embedding with its grid flags (see KnoodleDraw). *)
+runGeometry[in_, simplify_, drawFlags_List, extraFlags_List, inFlags_List, seedFlags_List] :=
+ Module[{tsv, out},
+  (* Each step goes through runChecked: a failed simplify or draw is
+     KnoodleDraw::knoodletool and $Failed, never a partial drawing. *)
   tsv = Which[
      TrueQ[simplify] && Head[in] === File,
       Module[{outFile = tempFile["knoodle-simplified-", ".tsv"]},
-       runTool[Join[{exe["knoodlesimplify"], "--output=" <> outFile}, randFlag, {First[in]}]];
-       Import[outFile, "Text"]],
+       If[runChecked[KnoodleDraw,
+           Join[{exe["knoodlesimplify"], "--output=" <> outFile}, inFlags, seedFlags, {First[in]}]] === $Failed,
+        $Failed, Import[outFile, "Text"]]],
      TrueQ[simplify],
-      runTool[Join[{exe["knoodlesimplify"], "--streaming-mode"}, randFlag], "StandardOutput", in],
+      runChecked[KnoodleDraw, Join[{exe["knoodlesimplify"], "--streaming-mode"}, inFlags, seedFlags], in],
      Head[in] === File, None,  (* draw directly from the file, no simplify step *)
      True, in];
+  If[tsv === $Failed, Return[$Failed]];
   out = If[tsv === None,
-     runTool[Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag, {First[in]}], "StandardOutput"],
-     runTool[Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, randFlag], "StandardOutput", tsv]];
+     runChecked[KnoodleDraw, Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags, inFlags, seedFlags, {First[in]}]],
+     runChecked[KnoodleDraw, Join[{exe["knoodledraw"], "--format=wl"}, drawFlags, extraFlags,
+        If[TrueQ[simplify], {}, inFlags], seedFlags], tsv]];
+  If[out === $Failed, Return[$Failed]];
   ToExpression /@ Select[StringSplit[StringTrim[out], "\n"], StringStartsQ[#, "<|"] &]
 ];
 
@@ -220,10 +392,11 @@ runGeometry[in_, simplify_, extraFlags_List, randomizeQ_ : False, embeddingQ_ : 
    step rather than also drawing. *)
 runSimplifyPdc[in_, extraFlags_List] := If[Head[in] === File,
    Module[{outFile = tempFile["knoodle-pdc-", ".txt"]},
-    runTool[Join[{exe["knoodlesimplify"], "--format=pdc", "--output=" <> outFile}, extraFlags, {First[in]}]];
-    Import[outFile, "Text"]],
-   runTool[Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags],
-     "StandardOutput", in]
+    If[runChecked[KnoodleSimplify,
+        Join[{exe["knoodlesimplify"], "--format=pdc", "--output=" <> outFile}, extraFlags, {First[in]}]] === $Failed,
+     $Failed, Import[outFile, "Text"]]],
+   runChecked[KnoodleSimplify,
+     Join[{exe["knoodlesimplify"], "--format=pdc", "--streaming-mode"}, extraFlags], in]
 ];
 
 (* ---- KnotTheory-format output ("OutputFormat" -> "KnotTheory") ----
@@ -762,12 +935,17 @@ render[geos_List, thick_, img_, imageGivenQ_, checkerboardQ_, labelSet_, legendQ
    parsed by runGeometry's existing line splitter. "Color" is the same wire
    color the 2D emitter puts on every arc, so the two views color a component
    identically. Coordinates are grid-derived (order 10-1000), not normalized
-   to a unit box. The run is randomized (Reapr permutes, and --embedding adds
-   a random rotation): coordinates AND vertex counts differ run to run, only
-   the topology is stable -- nothing here may depend on either, including on
-   the embedding being rotated at all, which is a temporary workaround
-   upstream. An input that yields nothing embeddable still comes back as
-   <|"Components" -> {}|>, keeping the stream line-aligned. See
+   to a unit box. Since Knoodle 1.2 the curves are exactly the embedding Reapr
+   builds, never rotated: x and y lie on the grid of the OrthoDraw layout
+   inside Reapr (pitch 20 by default, coordinates on multiples of half of it),
+   z on Reapr's integer levels, either stretched so the z extent is
+   reapr-scaling (1.0) times the smaller of the x and y extents, or
+   --z-grid-size units apart. "EmbeddingGridSize" sets the three spacings.
+   The run is randomized (Reapr permutes the diagram, and its layout
+   randomizes bends from a source --seed does not reach): coordinates AND
+   vertex counts differ run to run, only the topology is stable, so nothing
+   here may depend on either. An input that yields nothing embeddable still
+   comes back as <|"Components" -> {}|>, keeping the stream line-aligned. See
    ~/Knoodle/handoff/paclet-3d-embedding-output/ROUND-1.md. *)
 
 (* --embedding is newer than the oldest knoodledraw this paclet supports, and
@@ -793,9 +971,11 @@ embeddingColorIndex[knots_List] := With[{c = Union @@ (embeddingColors /@ knots)
 
 (* Tube radius. Two competing scales set it. The tubes must not merge, which
    bounds the radius by the embedding's own pitch: every edge is a whole
-   number of Reapr grid pitches and non-adjacent strands stay a full pitch
-   apart, so the shortest edge measures the pitch, and a radius of pitch/3
-   still leaves a third of a pitch of daylight between neighboring strands.
+   number of grid steps (half the x/y pitch across, one level spacing up), and
+   non-adjacent strands stay at least one such step apart, so the shortest
+   edge measures the pitch, and a radius of pitch/3 still leaves a third of a
+   pitch of daylight between neighboring strands. A small z grid size lowers
+   that bound with it: levels 2 units apart are only 2 units apart.
    But the tubes must also stay *visible*, and the embedding's extent grows
    with the crossing number while its pitch does not -- a fixed multiple of
    the pitch draws an 8-crossing knot as hairlines at the same ImageSize that
@@ -879,12 +1059,14 @@ KnoodleDraw::baddim =
    colors -- the physical link components, shared across all summands, so
    a knot's connect-sum factors all draw in one color; with older binaries
    the legend falls back to per-summand component runs.
-   "RandomizeProjection" (True by default): apply a random shear before
-   projecting 3D geometry to a diagram. The default projection is straight
-   down the z axis, which can degenerate on vertical/coplanar segments,
-   so this defaults on; set to False to get the plain z-axis projection
-   (e.g. for reproducibility). Only meaningful for 3D input read from stdin
-   (KnotData/space-curve/point-list inputs); a no-op otherwise.
+   "Projection" (Automatic), "RandomizeProjection" (True), "ExactInput"
+   (False), RandomSeeding (Automatic): how 3D input becomes a diagram, shared
+   with KnoodleSimplify and KnoodleIdentify -- see inputFlags/seedFlags. By
+   default 3D geometry is projected after a uniformly random rotation
+   (Knoodle >= 1.2; earlier versions applied a random shear); "Projection" ->
+   "Z", "X" or "Y" projects straight down that axis instead, exactly. All of
+   them apply to 3D input (KnotData, space curves, point lists, multi-
+   component links) and are no-ops for PD codes.
    "Thickness": Automatic (default) draws strands u/3 wide (capped at 7 pt);
    a number is an AbsoluteThickness in printer's points, clamped to the same
    u/3 bound; any other directive is used as-is. Under "DrawingDimension" -> 3
@@ -897,14 +1079,24 @@ KnoodleDraw::baddim =
    drawing uses. Anything else is a KnoodleDraw::baddim error. The 2D
    layout/label/decoration options ("Checkerboard", "Labels", LabelStyle,
    "ExteriorFace", "Orientation") have no meaning for dimension 3 and are
-   ignored; "Simplify", "RandomizeProjection", ImageSize, "Thickness", and
-   PlotLegends all apply, and Reapr's own knobs are reached through
-   "LayoutOptions" (e.g. {"reapr-energy" -> "height"} -- only tv/height/tv_mcf
-   are compiled into the bundled binaries; the others warn on stderr and
-   silently fall back to tv, see markdown-docs/KnoodleDraw.md),
-   {"reapr-scaling" -> 2.0}). The embedding is randomized: repeated calls on
-   one input give different -- equally valid -- curves, with different vertex
-   counts.
+   ignored; "Simplify", the 3D input options, ImageSize, "Thickness", and
+   PlotLegends all apply, and so do two options that only dimension 3 reads:
+   "EmbeddingGridSize" (Automatic): the spacing of the embedding's grid, as
+   n (all three axes) or {nx, ny, nz}, each a positive integer or Automatic.
+   nx and ny are knoodledraw's --x-grid-size/--y-grid-size, which under
+   --embedding size the OrthoDraw layout inside Reapr (default 20; even
+   values keep x and y integers, since coordinates fall on multiples of half
+   the pitch); nz is --z-grid-size, consecutive levels nz apart. Automatic z
+   leaves Reapr's own spacing: levels stretched until the z extent equals
+   reapr-scaling (1.0) times the smaller horizontal extent, so z is often
+   not a whole number. nz and "LayoutOptions" -> {"reapr-scaling" -> s}
+   both set the z spacing, and knoodledraw refuses the pair.
+   "ReaprEnergy" (Automatic = TV): Reapr's energy, "TV", "Height", or
+   "TV_MCF" -- see energyFlags. Other Reapr knobs (reapr-scaling) are
+   reached through "LayoutOptions". The embedding is randomized: repeated
+   calls on one input give different -- equally valid -- curves, with
+   different vertex counts, and RandomSeeding cannot pin that (the bend
+   randomization of Reapr's layout is out of the seed's reach).
    "Orientation": False (default) draws unoriented strands; True puts an
    arrowhead in every traversed arrowhead square -- two per drawing edge
    (spec 4.1; All is accepted as a synonym for True). Unknot-marker summands
@@ -912,12 +1104,28 @@ KnoodleDraw::baddim =
    ImageSize: applies to the widest drawing of the output; on multi-summand
    output every other drawing gets a proportionally smaller ImageSize at the
    common scale (spec 9). *)
+KnoodleDraw::badgrid =
+  "Value of option \"EmbeddingGridSize\" -> `1` is not Automatic, a positive integer, \
+or a list {nx, ny, nz} of positive integers or Automatic.";
+
+(* knoodledraw's grid flags for "EmbeddingGridSize" (dimension 3 only), or
+   $Failed after a KnoodleDraw::badgrid message. *)
+embeddingGridFlags[spec_] := Module[{sizes},
+  sizes = Replace[spec, {Automatic -> {Automatic, Automatic, Automatic},
+     n_Integer?Positive :> {n, n, n}}];
+  If[! MatchQ[sizes, {Repeated[_Integer?Positive | Automatic, {3}]}],
+   Message[KnoodleDraw::badgrid, ToString[spec, InputForm]]; Return[$Failed]];
+  Join @@ MapThread[If[#2 === Automatic, {}, {"--" <> #1 <> "-grid-size=" <> ToString[#2]}] &,
+    {{"x", "y", "z"}, sizes}]];
+
 Options[KnoodleDraw] = {"Simplify" -> Automatic, "LayoutOptions" -> {},
    "Checkerboard" -> False, "Labels" -> {}, LabelStyle -> {}, "ExteriorFace" -> Automatic,
-   PlotLegends -> None, "RandomizeProjection" -> True, ImageSize -> 340,
-   "Thickness" -> Automatic, "Orientation" -> False, "DrawingDimension" -> 2};
+   PlotLegends -> None, "Projection" -> Automatic, "RandomizeProjection" -> True,
+   "ExactInput" -> False, RandomSeeding -> Automatic, ImageSize -> 340,
+   "Thickness" -> Automatic, "Orientation" -> False, "DrawingDimension" -> 2,
+   "EmbeddingGridSize" -> Automatic, "ReaprEnergy" -> Automatic};
 KnoodleDraw[input_, opts : OptionsPattern[]] := Module[
-  {norm, tsv, def, simp, geos, labelSet, extFlag, dim, embedQ},
+  {norm, tsv, def, simp, geos, labelSet, extFlag, dim, embedQ, inFlags, seed, drawFlags},
   norm = toTSV[input];
   If[norm === $Failed, Return[$Failed]];
   {tsv, def} = norm;
@@ -929,12 +1137,26 @@ KnoodleDraw[input_, opts : OptionsPattern[]] := Module[
   embedQ = dim === 3;
   If[embedQ && ! $embeddingSupportedQ, Message[KnoodleDraw::noembedding]; Return[$Failed]];
   simp = Replace[OptionValue["Simplify"], Automatic -> def];
-  (* --exterior-face is a 2D layout flag; "LayoutOptions" still passes
-     through, since that is how Reapr's --reapr-* knobs are reached. *)
+  inFlags = inputFlags[KnoodleDraw, OptionValue["Projection"],
+    OptionValue["RandomizeProjection"], OptionValue["ExactInput"]];
+  seed = seedFlags[KnoodleDraw, OptionValue[RandomSeeding]];
+  (* The 2D drawing is always made on the fixed $gridSize grid the renderer is
+     built around (DRAWING-SPEC.md), so the grid options are an embedding's
+     only; so is the energy. --exterior-face is a 2D layout flag;
+     "LayoutOptions" passes through either way, since that is also how
+     Reapr's remaining knobs (reapr-scaling) are reached. *)
+  drawFlags = If[embedQ,
+    With[{g = embeddingGridFlags[OptionValue["EmbeddingGridSize"]],
+          e = energyFlags[KnoodleDraw, OptionValue["ReaprEnergy"]]},
+     If[g === $Failed || e === $Failed, $Failed, Join[{"--embedding"}, g, e]]],
+    {"--x-grid-size=" <> ToString[$gridSize], "--y-grid-size=" <> ToString[$gridSize]}];
+  If[MemberQ[{inFlags, seed, drawFlags}, $Failed], Return[$Failed]];
   extFlag = If[embedQ, {}, Replace[OptionValue["ExteriorFace"],
      {n_Integer?NonNegative :> {"--exterior-face=" <> ToString[n]}, _ :> {}}]];
-  geos = runGeometry[tsv, simp, Join[toCliFlags[OptionValue["LayoutOptions"]], extFlag],
-    TrueQ[OptionValue["RandomizeProjection"]], embedQ];
+  geos = runGeometry[tsv, simp, drawFlags, Join[toCliFlags[OptionValue["LayoutOptions"]], extFlag],
+    inFlags, seed];
+  (* A failed run has already said why (KnoodleDraw::knoodletool). *)
+  If[geos === $Failed, Return[$Failed]];
   If[embedQ,
    (* <|"Components" -> {}|> is the embedding's analogue of "produced no
       geometry" -- emitted per knot so the stream stays line-aligned. *)
@@ -961,8 +1183,12 @@ geometry, or an invalid diagram).";
    assisted R1a/R2a) with no rerouting; 4 = path rerouting; 5 = + summand
    detection; 6+ = full Reapr. Note 3 -> 4 is not a superset: level 4 drops
    the local pass (upstream tuning: it doesn't help once rerouting engages).
-   "RandomizeProjection": as in KnoodleDraw, applies only to 3D
-   input read from stdin. "Unite": False (default) is knoodlesimplify's own
+   "Projection", "RandomizeProjection", "ExactInput", RandomSeeding: as in
+   KnoodleDraw (inputFlags/seedFlags); the first three apply only to 3D
+   input. A seed governs the random projection and Reapr's own randomness,
+   except its layout's bend randomization: for a run that repeats exactly at
+   level 6+, also give "SimplifyOptions" -> {"randomize-bends" -> 0,
+   "randomize-virtual-edges" -> False}. "Unite": False (default) is knoodlesimplify's own
    --split (one diagram per prime factor); True is --unite (connect-sums
    same-colored factors into one diagram per split component -- see
    KnoodleSimplify::usage). "MaxReaprAttempts", "Compaction", and
@@ -974,7 +1200,12 @@ geometry, or an invalid diagram).";
    emits --no-compaction to skip it. "ReaprEnergy": Automatic (the tool's
    default) or one of "TV", "Height", "TV_MCF" -- Reapr's energy functional
    (--reapr-energy). "SimplifyOptions": arbitrary knoodlesimplify
-   flags, same passthrough convention as KnoodleDraw's "LayoutOptions".
+   flags, same passthrough convention as KnoodleDraw's "LayoutOptions" --
+   e.g. the rarer Reapr knobs {"reapr-rotation-trials" -> 10},
+   {"reapr-scaling" -> 2.0} or {"reapr-z-grid-size" -> 10} (Knoodle 1.2; the
+   last two both set the level spacing of Reapr's internal embeddings, and
+   the tool refuses the pair). -q is not exposed: under --streaming-mode the
+   tool's reports already go to its log file, not to the paclet.
    "OutputFormat": "PlanarDiagramComplex" (default) wraps the full complex;
    "KnotTheory" returns KnotTheory` PD codes instead -- one PD[X[...], ...]
    per physically split portion of the link (a bare PD when there is only
@@ -983,37 +1214,38 @@ geometry, or an invalid diagram).";
    the format cannot express that separate diagrams share a link component
    (the complex's cross-summand colors), so same-colored connect-sum
    factors are spliced back together first. *)
-Options[KnoodleSimplify] = {"SimplifyLevel" -> Automatic, "RandomizeProjection" -> True,
+Options[KnoodleSimplify] = {"SimplifyLevel" -> Automatic, "Projection" -> Automatic,
+   "RandomizeProjection" -> True, "ExactInput" -> False, RandomSeeding -> Automatic,
    "Unite" -> False, "MaxReaprAttempts" -> Automatic, "Compaction" -> True,
    "ReaprEnergy" -> Automatic, "SimplifyOptions" -> {},
    "OutputFormat" -> "PlanarDiagramComplex"};
 KnoodleSimplify::badformat = "`1` is not a recognized \"OutputFormat\" \
 (\"PlanarDiagramComplex\" or \"KnotTheory\").";
-KnoodleSimplify::badenergy = "`1` is not a recognized \"ReaprEnergy\" \
-(\"TV\", \"Height\", or \"TV_MCF\").";
 KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
-  {norm, tsv, fmt, levelFlag, randFlag, uniteFlag, maxReaprFlag, compactionFlag,
-   energy, energyFlag, extraFlags, serialized, pds},
+  {norm, tsv, fmt, levelFlag, inFlags, seed, uniteFlag, maxReaprFlag, compactionFlag,
+   energyFlag, extraFlags, serialized, pds},
   norm = toTSV[input];
   If[norm === $Failed, Message[KnoodleSimplify::badinput, input]; Return[$Failed]];
   tsv = First[norm];
   fmt = Replace[OptionValue["OutputFormat"], Automatic -> "PlanarDiagramComplex"];
   If[! MemberQ[{"PlanarDiagramComplex", "KnotTheory"}, fmt],
    Message[KnoodleSimplify::badformat, fmt]; Return[$Failed]];
-  energy = OptionValue["ReaprEnergy"];
-  If[energy =!= Automatic && ! MemberQ[{"TV", "Height", "TV_MCF"}, energy],
-   Message[KnoodleSimplify::badenergy, energy]; Return[$Failed]];
+  energyFlag = energyFlags[KnoodleSimplify, OptionValue["ReaprEnergy"]];
+  inFlags = inputFlags[KnoodleSimplify, OptionValue["Projection"],
+    OptionValue["RandomizeProjection"], OptionValue["ExactInput"]];
+  seed = seedFlags[KnoodleSimplify, OptionValue[RandomSeeding]];
+  If[MemberQ[{energyFlag, inFlags, seed}, $Failed], Return[$Failed]];
   levelFlag = Replace[OptionValue["SimplifyLevel"],
      {Automatic -> {}, n_Integer :> {"--simplify-level=" <> ToString[n]}}];
-  randFlag = If[TrueQ[OptionValue["RandomizeProjection"]], {"--randomize-projection"}, {}];
   uniteFlag = If[TrueQ[OptionValue["Unite"]] || fmt === "KnotTheory", {"--unite"}, {}];
   maxReaprFlag = Replace[OptionValue["MaxReaprAttempts"],
      {Automatic -> {}, n_Integer?Positive :> {"--max-reapr-attempts=" <> ToString[n]}}];
   compactionFlag = If[TrueQ[OptionValue["Compaction"]], {}, {"--no-compaction"}];
-  energyFlag = Replace[energy, {Automatic -> {}, e_ :> {"--reapr-energy=" <> ToString[e]}}];
   extraFlags = toCliFlags[OptionValue["SimplifyOptions"]];
   serialized = runSimplifyPdc[tsv,
-    Join[levelFlag, randFlag, uniteFlag, maxReaprFlag, compactionFlag, energyFlag, extraFlags]];
+    Join[levelFlag, inFlags, seed, uniteFlag, maxReaprFlag, compactionFlag, energyFlag, extraFlags]];
+  (* A failed run has already said why (KnoodleSimplify::knoodletool). *)
+  If[serialized === $Failed, Return[$Failed]];
   (* Empty output means the tool bailed (degenerate/self-intersecting
      geometry, invalid diagram): say so rather than returning a quietly
      empty complex. A genuine unknot is NOT empty ("u <color>" line). *)
@@ -1030,11 +1262,30 @@ KnoodleSimplify[input_, opts : OptionsPattern[]] := Module[
    Unlike knoodlesimplify/knoodledraw, knoodleidentify has no --streaming-mode
    flag (it reads stdin directly whenever no file argument is given), so this
    is simpler than runSimplifyPdc/runGeometry: just the same
-   File[...]-vs-stdin dispatch. *)
-runIdentify[in_, extraFlags_List] := Module[{dataFlag = {"--data-dir=" <> $KnoodleDataDirectory}},
-   If[Head[in] === File,
-     runTool[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags, {First[in]}], "StandardOutput"],
-     runTool[Join[{exe["knoodleidentify"]}, dataFlag, extraFlags], "StandardOutput", in]]
+   File[...]-vs-stdin dispatch.
+
+   Checked like the others, with one exception. knoodleidentify also exits
+   nonzero when a summand comes back NotFound (within the table range, yet
+   unresolved after Reapr: a table gap or a hard simplification case), but its
+   answer is complete and keeps those summands as NotFound[n, pd]. When every
+   error line it printed is one of those, return the answer with a
+   KnoodleIdentify::notfound warning. Anything else -- a KLUT table that is
+   missing, damaged or from another table set, a library error -- is
+   KnoodleIdentify::knoodletool and $Failed. *)
+notFoundLineQ[line_String] := StringStartsQ[line, "Error:"] &&
+   StringEndsQ[line, "table gap or a hard simplification case?"];
+
+runIdentify[in_, extraFlags_List] := Module[{dir = $KnoodleDataDirectory, cmd, r, errs},
+   If[! StringQ[dir], Return[$Failed]];
+   cmd = Join[{exe["knoodleidentify"], "--data-dir=" <> dir}, extraFlags];
+   r = If[Head[in] === File, runResult[Append[cmd, First[in]]], runResult[cmd, in]];
+   If[r === $Failed, Return[$Failed]];
+   If[r["ExitCode"] === 0, Return[r["StandardOutput"]]];
+   errs = toolErrorLines[r["StandardError"]];
+   If[errs =!= {} && AllTrue[errs, notFoundLineQ],
+    Message[KnoodleIdentify::notfound, Length[errs]];
+    r["StandardOutput"],
+    toolFailed[KnoodleIdentify, cmd, r]]
 ];
 
 KnoodleIdentify::badinput = "`1` is not a recognized knot/link input.";
@@ -1045,20 +1296,40 @@ connect-summed into one knot.";
 KnoodleIdentify::failed =
   "knoodleidentify produced no result for this input (a degenerate projection or an \
 invalid diagram).";
+KnoodleIdentify::notfound =
+  "`1` summand(s) came back NotFound: within the table's crossing range, yet still \
+unidentified after simplification. That points to a gap in the KLUT tables or a hard \
+simplification case; the result keeps them as NotFound[n, pd].";
 (* "MaxCrossings": knoodleidentify's --max-crossings (Automatic = its own
-   default, 13). "RandomizeProjection": as in KnoodleDraw/KnoodleSimplify --
-   randomly rotate 3D geometry before projecting (the flag reached
-   knoodleidentify upstream 2026-07-03); no-op for explicit diagram input. *)
-Options[KnoodleIdentify] = {"MaxCrossings" -> Automatic, "RandomizeProjection" -> True};
+   default, 13). "Projection", "RandomizeProjection", "ExactInput",
+   RandomSeeding: as in KnoodleDraw/KnoodleSimplify (inputFlags/seedFlags);
+   the seed governs the random projection and the escalation's Reapr
+   embeddings, except their layout's bend randomization. "IdentifyOptions":
+   arbitrary knoodleidentify flags, same passthrough convention as
+   KnoodleDraw's "LayoutOptions" -- e.g. {"escalation-rounds" -> 6,
+   "escalation-band" -> 20, "reapr-rotation-trials" -> 10,
+   "reapr-energy" -> "Height", "reapr-scaling" -> 2.0, "reapr-z-grid-size" -> 10}
+   (Knoodle 1.2 added the reapr-* ones). Flags that change what the tool prints
+   (expanded, tsv, verify-tables) or where it finds its tables (data-dir)
+   break the wrapper, which reads the default output and always passes
+   --data-dir itself; "allow-other-tables" -> True is the one table flag that
+   makes sense here. -q is not exposed: the wrapper never shows the tool's
+   stderr summary anyway. *)
+Options[KnoodleIdentify] = {"MaxCrossings" -> Automatic, "Projection" -> Automatic,
+   "RandomizeProjection" -> True, "ExactInput" -> False, RandomSeeding -> Automatic,
+   "IdentifyOptions" -> {}};
 KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[
-  {norm, tsv, maxFlag, randFlag, out, result, linkCrossings},
+  {norm, tsv, maxFlag, inFlags, seed, out, result, linkCrossings},
   norm = toTSV[input];
   If[norm === $Failed, Message[KnoodleIdentify::badinput, input]; Return[$Failed]];
   tsv = First[norm];
   maxFlag = Replace[OptionValue["MaxCrossings"],
      {Automatic -> {}, n_Integer?Positive :> {"--max-crossings=" <> ToString[n]}}];
-  randFlag = If[TrueQ[OptionValue["RandomizeProjection"]], {"--randomize-projection"}, {}];
-  out = runIdentify[tsv, Join[maxFlag, randFlag]];
+  inFlags = inputFlags[KnoodleIdentify, OptionValue["Projection"],
+    OptionValue["RandomizeProjection"], OptionValue["ExactInput"]];
+  seed = seedFlags[KnoodleIdentify, OptionValue[RandomSeeding]];
+  If[MemberQ[{inFlags, seed}, $Failed], Return[$Failed]];
+  out = runIdentify[tsv, Join[maxFlag, inFlags, seed, toCliFlags[OptionValue["IdentifyOptions"]]]];
   If[! StringQ[out], Return[$Failed]];
   result = ToExpression[StringTrim[out]];
   If[Head[result] =!= Association,
@@ -1077,6 +1348,101 @@ KnoodleIdentify[input_, opts : OptionsPattern[]] := Module[
    Message[KnoodleIdentify::link, First[linkCrossings]];
    Return[$Failed]];
   result
+];
+
+(* ---- KnoodleProve ----------------------------------------------------------
+   knoodleprove reads a move-trace stream (Knoodle docs/move-descriptor.md) and
+   writes one line per claim:
+
+     #verify step N CLAIM: VERIFIED (detail)
+     #verify step N CLAIM: MISMATCH -- detail
+     #verify step N CLAIM: UNCHECKED (detail)
+     #verify step N split: 1 crossingless component(s) came free (colours 0)
+     #verify stream unlink: VERIFIED (...)
+
+   CLAIM may hold spaces and parentheses ("disk (V0)", "labels (V2/V3/V5)") but
+   no ": ", so the first ": " ends it. A line with no verdict word only reports
+   (split), and gets "Verdict" -> None.
+
+   It exits 1 on any MISMATCH, and also on a malformed stream or a library
+   error. The first is the answer the caller asked for, so a nonzero exit with
+   a MISMATCH line on stdout and nothing but warnings on stderr is returned as
+   a result; anything else nonzero is KnoodleProve::knoodletool and $Failed.
+   A malformed stream prints "knoodleprove: <where>: trace line N: ..." on
+   stderr, which toolFailureText quotes (it has no "Error:" prefix, so the
+   last lines of stderr are what it shows). An empty stream exits 0 with a
+   warning and no lines; that is KnoodleProve::norecords and $Failed, since
+   nothing was checked.
+
+   Not exposed: --thread-exterior, which rewrites the stream (choosing one
+   exterior face per record) instead of checking it. *)
+(* "(...)" whose first parenthesis closes only at the very end. A redraw's
+   detail nests them: "(rotation x->y->z->x (+2pi/3 about (1,1,1)))". *)
+outerParensQ[t_String] := StringStartsQ[t, "("] && StringEndsQ[t, ")"] &&
+   FreeQ[Most[Accumulate[Replace[Characters[t], {"(" -> 1, ")" -> -1, _ -> 0}, {1}]]], 0];
+
+proveDetail[d_String] := With[{t = StringTrim[d]},
+   Which[
+    outerParensQ[t], StringTake[t, {2, -2}],
+    StringStartsQ[t, "--"], StringTrim[StringDrop[t, 2]],
+    True, t]];
+
+proveClaim[line_String] := Replace[
+   StringCases[line,
+    StartOfString ~~ "#verify " ~~ where : ("stream" | ("step " ~~ DigitCharacter ..)) ~~ " " ~~
+      claim : Shortest[__] ~~ ": " ~~ rest___ ~~ EndOfString :> {where, claim, rest}],
+   {
+    {{where_, claim_, rest_}} :> Join[
+      <|"Step" -> If[where === "stream", All, ToExpression[StringDrop[where, 5]]],
+        "Claim" -> claim|>,
+      Replace[StringCases[rest, StartOfString ~~ v : ("VERIFIED" | "MISMATCH" | "UNCHECKED") ~~
+            d___ ~~ EndOfString :> {v, d}], {
+         {{v_, d_}} :> <|"Verdict" -> v, "Detail" -> proveDetail[d]|>,
+         _ :> <|"Verdict" -> None, "Detail" -> StringTrim[rest]|>}]],
+    _ -> Nothing}];
+
+proveClaims[out_String] := proveClaim /@ StringSplit[out, {"\r\n", "\n"}];
+
+(* stderr lines that are more than warnings. *)
+proveStderrErrors[err_String] := Select[StringTrim /@ StringSplit[err, {"\r\n", "\n"}],
+   # =!= "" && ! StringStartsQ[#, "knoodleprove: warning:"] &];
+
+KnoodleProve::badinput =
+  "`1` is not a move trace: give File[path], a path to a trace file, or the trace's text \
+as a string.";
+KnoodleProve::norecords =
+  "The trace has no records, so nothing was checked.";
+KnoodleProve::badopt = "Value of option \"CheckExterior\" -> `1` should be True or False.";
+
+(* A string with no line break that names a file is a path; any other string
+   is the trace's text (a trace always runs to several lines). *)
+proveInput[File[p_String]] := File[ExpandFileName[p]];
+proveInput[s_String /; StringContainsQ[s, "\n"]] := s;
+proveInput[s_String /; FileExistsQ[s]] := File[ExpandFileName[s]];
+proveInput[_] := $Failed;
+
+Options[KnoodleProve] = {"CheckExterior" -> False};
+KnoodleProve[trace_, opts : OptionsPattern[]] := Module[
+  {in = proveInput[trace], ext = OptionValue["CheckExterior"], cmd, r, claims, verdicts},
+  If[in === $Failed, Message[KnoodleProve::badinput, Short[trace]]; Return[$Failed]];
+  If[! BooleanQ[ext], Message[KnoodleProve::badopt, ext]; Return[$Failed]];
+  cmd = Join[{exe["knoodleprove"]}, If[ext, {"--check-exterior"}, {}]];
+  r = If[Head[in] === File, runResult[Append[cmd, First[in]]], runResult[cmd, in]];
+  If[r === $Failed, Return[$Failed]];
+  claims = proveClaims[r["StandardOutput"]];
+  verdicts = Lookup[claims, "Verdict", None];
+  Which[
+   r["ExitCode"] =!= 0 && ! (MemberQ[verdicts, "MISMATCH"] &&
+       proveStderrErrors[r["StandardError"]] === {}),
+    toolFailed[KnoodleProve, cmd, r],
+   claims === {},
+    Message[KnoodleProve::norecords]; $Failed,
+   True,
+    <|"Verdict" -> Which[MemberQ[verdicts, "MISMATCH"], "MISMATCH",
+        MemberQ[verdicts, "UNCHECKED"], "UNCHECKED", True, "VERIFIED"],
+      "Unlink" -> MemberQ[claims, KeyValuePattern[{"Step" -> All, "Claim" -> "unlink",
+           "Verdict" -> "VERIFIED"}]],
+      "Claims" -> claims|>]
 ];
 
 End[];

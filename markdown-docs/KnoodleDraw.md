@@ -50,11 +50,14 @@ three public functions shares:
   stdin as TSV. Default-simplifies (the raw projection is generally
   arbitrary/degenerate-prone).
 - **List of lists of 3D points** (multi-component link, one list per
-  component): `{{{x,y,z},...}, {{x,y,z},...}, ...}`. Knoodle only reads this
-  format (blank-line-separated vertex blocks) from a *file* with a
+  component): `{{{x,y,z},...}, {{x,y,z},...}, ...}`. Knoodle up to 1.1 only
+  read this format (blank-line-separated vertex blocks) from a *file* with a
   `.kndlxyz` extension, never stdin — so this is written to a scratch file
   and passed as `File[...]`; `runGeometry`/`runSimplifyPdc`/`runIdentify`
   all know how to draw/simplify/identify directly from a `File[...]`.
+  (Knoodle 1.2 reads blank-line-separated components from stdin too, and an
+  optional `#color N` line before a component sets its color; the paclet
+  still uses the file route, which works on every version.)
   Default-simplifies.
 - **Native Knoodle PD code, one summand**: a list of crossing rows, each row
   4, 5, 6, or 7 integers. Column counts: 4 = unsigned PD, 5 = signed PD (5th
@@ -96,7 +99,12 @@ three public functions shares:
 | `LabelStyle` | `{}` | The one user-facing styling hook (DRAWING-SPEC.md §8.4–8.5): styles label *text* only — font family, weight, slant, color, etc. — never placement. The default pins `FontFamily -> "Source Sans Pro"` (bundled in every Wolfram installation's `SystemFiles/Fonts`, so guaranteed present, and measurable by the kernel at drawing time). User directives merge *after* the default, so `LabelStyle -> Bold` bolds the pinned font while `LabelStyle -> {FontFamily -> ...}` swaps it. Text is sized by a global largest-fit rule — the largest size at which every label fits its reserved box, measured (rendered extent, not character count) under the fully resolved style across *all* drawings of the call — so all labels of an output share one size. A numeric `FontSize` inside `LabelStyle` is honored only when no explicit `ImageSize` is given, in which case it *sets the drawing scale* (every drawing's `ImageSize` is derived from it); with an explicit `ImageSize`, `ImageSize` wins and the largest-fit rule applies. **Reference-page caveat worth one sentence**: if a user names a `FontFamily` that is not installed, the front end silently falls back to another font and the measured fit may mismatch the rendering. |
 | `"ExteriorFace"` | `Automatic` | Which face OrthoDraw lays out as the unbounded exterior region — a non-negative integer, 0-based. `Automatic` is OrthoDraw's own default (the face with the largest number of edges). Applies uniformly to every summand of a multi-summand diagram. |
 | `PlotLegends` | `None` | `Automatic` adds a `LineLegend` matching each link component's color to its (global, 0-based) component number — numbered consistently with how colors are assigned across summands (see below), not per-summand. |
-| `"RandomizeProjection"` | `True` | Applies a random rotation (via `Reapr::RandomRotation`, *not* a shear — this was reworked mid-session, see Notes) before projecting/using 3D geometry. The default projection can degenerate on vertical/coplanar segments (stdin single-component case) or exact coincidental intersections between components (multi-component `.kndlxyz` case) — this defaults on to avoid both. Set to `False` for reproducibility (e.g. testing) or when you know your geometry is already generic. Meaningful for *any* 3D-geometry input (both the stdin single-curve path and the `.kndlxyz` multi-component file path — both were fixed to honor this flag over the course of the session; earlier in development the file path silently ignored it). No-op for PD-code/`PlanarDiagramComplex` input (nothing to project). |
+| `"Projection"` | `Automatic` | Knoodle 1.2's `--projection`: how 3D input becomes a diagram. `"Z"`, `"X"`, `"Y"` project straight down that axis, **exactly** (integer coordinates as given, floating-point ones after scaling onto Knoodle's integer grid; vertical edges and other degeneracies are resolved by symbolic perturbation, never by moving the curve — `x` and `y` permute the axes cyclically, so nothing is mirrored). `"Random"` projects after a **uniformly random rotation** of the whole link (an exact integer-quaternion rotation for integer coordinates). Case is ignored. `Automatic` defers to `"RandomizeProjection"`: `"Random"` when it is `True` (the default), `"Z"` when `False`. Anything else is `KnoodleDraw::badproj` and `$Failed`. Goes to whichever tool reads the 3D geometry — `knoodlesimplify` when simplifying first, `knoodledraw` otherwise — for both the single-curve (stdin) and multi-component (`.kndlxyz` file) paths. No-op for PD-code/`PlanarDiagramComplex` input: a PD code is already a diagram, and the tools never embed and re-view it. To view a diagram's own embedding from the side, embed it first (`"DrawingDimension" -> 3`, take the `Tube` points) and draw *those* with `"Projection" -> "X"` — see "Side views" below. |
+| `"RandomizeProjection"` | `True` | The older form of `"Projection"`, kept so existing code keeps its meaning: `True` = `"Random"`, `False` = `"Z"`. Only consulted when `"Projection"` is `Automatic`. Since Knoodle 1.2 the random projection is a uniformly random rotation for every input shape; up to 1.1 3-column input got a random *shear* (an oblique view at most ~35° off the z axis) and only `.kndlxyz` input a rotation. |
+| `"ExactInput"` | `False` | `True` passes `--exact-input`: refuse 3D input that cannot be projected exactly — floating-point coordinates that do not land exactly on Knoodle's integer grid (dyadic values like 0.25 do, 0.01 does not), that sit too far from the origin for their spread, or that `"Random"` would have to rotate. Integer coordinates always pass, under any projection. A refusal is the tool's error, surfaced as `KnoodleDraw::knoodletool` quoting it (e.g. "rounding the coordinates onto Knoodle's integer grid (scale 2^57) would move a vertex by up to 0.5 grid units") and `$Failed`. KnotData's curves are floating point, so they are refused. |
+| `RandomSeeding` | `Automatic` | The built-in WL option, mapped to `--seed`. `Automatic`: each tool draws its own seed (the CLI default). `Inherited`: one seed drawn from Wolfram's generator (`RandomInteger[2^64 - 1]`), so `SeedRandom` governs it. An integer `n`: `--seed=Mod[n, 2^64]`. A string: its SHA-256 hash mod 2^64. Anything else is `KnoodleDraw::badseed`. One seed is drawn per call and given to **every** tool the call runs (simplify, then draw). The seed pins the random projection and Reapr's own random choices — but **not** the bend randomization of the OrthoDraw layout inside Reapr, which seeds itself from `std::random_device` (out of reach without a `src/` change). So: an unsimplified random projection (`"Simplify" -> False`) repeats exactly; the full pipeline and the embedding do not. Seeds repeat only on the same build of the tools. |
+| `"EmbeddingGridSize"` | `Automatic` | `"DrawingDimension" -> 3` only. The embedding's grid spacing: `n` (all three axes) or `{nx, ny, nz}`, each a positive integer or `Automatic`. `nx`, `ny` are `knoodledraw --x-grid-size`/`--y-grid-size`, which under `--embedding` size the OrthoDraw layout *inside Reapr* (default 20; vertices fall on multiples of half the pitch, so even values give integer x and y). `nz` is `--z-grid-size`: consecutive levels `nz` apart (z = `nz`·level, an integer). `Automatic` z keeps Reapr's own spacing: levels stretched until the z extent is `reapr-scaling` (1.0) times the smaller horizontal extent, so z is often not a whole number. `nz` together with `"LayoutOptions" -> {"reapr-scaling" -> s}` is refused by the tool (both set the z spacing). Malformed values are `KnoodleDraw::badgrid`. The 2D drawing ignores this option: the renderer is built around its own fixed grid (`$gridSize` = 4, DRAWING-SPEC.md). |
+| `"ReaprEnergy"` | `Automatic` | `"DrawingDimension" -> 3` only: `--reapr-energy`, the energy Reapr's layout minimizes. `Automatic` = the tool's default (TV), else `"TV"`, `"Height"` or `"TV_MCF"` (case ignored), validated exactly as `KnoodleSimplify`'s option — see "Energies" below for why the others are refused. |
 | `ImageSize` | `340` | Applies to the **widest** drawing of the output (in coordinate units, padding included); on multi-summand output every other drawing gets a proportionally smaller `ImageSize` so all drawings share one points-per-subgrid-unit scale (DRAWING-SPEC.md §9). Overrides any `FontSize` in `LabelStyle` when both are given explicitly. |
 | `"Orientation"` | `False` | `True` puts a solid arrowhead in **every** traversed arrowhead subgrid square — two per drawing edge, superimposed on the continuous strand, centered in its square, pointing along the arc's orientation, at most 1×1 subgrid unit so it survives any rescaling (DRAWING-SPEC.md §4; the head is a coordinate-space `Polygon`, not an `Arrowheads[]` spec, precisely so its size tracks the grid rather than the image). The density — a straight run of n cells shows 2n heads — is intentional; like arc labels, this is a debugging view. The former `True`/`All` distinction (one head per component vs. per arc) collapsed to a boolean; `All` is still accepted as a synonym for `True`. Arc polylines are emitted by `knoodledraw` in orientation order (verified: heads circulate consistently). Unknot-marker summands (`<\|"Unknot"->True\|>`) carry no arc data and draw without arrowheads. |
 | `"Thickness"` | `Automatic` | Strand stroke width. `Automatic` draws strands u/3 (one third of a subgrid unit) wide at the common scale, additionally capped at `AbsoluteThickness[7]` — the u/3 proportional bound is mandatory (DRAWING-SPEC.md §3.1: strokes must never reach a cell's interior or swallow the crossing gaps at any scale), the 7 pt cap keeps small diagrams at their familiar weight. An explicit number is `AbsoluteThickness[n]` in printer's points, clamped to the same u/3 bound. Any other value is passed through as a raw `Graphics` directive, unclamped (escape hatch, at the user's own risk). Under `"DrawingDimension" -> 3` it means something different — a `Tube` radius in the embedding's own coordinate units; see below. |
@@ -242,40 +250,83 @@ line splitter reads it unchanged:
   out, so the tool converts each to a 1-crossing kink first. `KnoodleDraw[{{}},
   "DrawingDimension" -> 3]` gives a real closed curve, not an empty picture.
 
+### The grid (Knoodle 1.2)
+
+Up to Knoodle 1.1, `--embedding` rotated its output randomly: Reapr takes x and
+y straight off the OrthoDraw grid, so the over/under jump at each crossing is
+an exactly vertical edge, which the floating-point projector could not read
+back. Knoodle 1.2's exact projector resolves such degeneracies by symbolic
+perturbation, so **the embedding is now emitted exactly as Reapr builds it,
+never rotated** (Knoodle `19e9138e`):
+
+- every edge is parallel to an axis;
+- x and y lie on the grid of the OrthoDraw layout inside Reapr — pitch 20 by
+  default, vertices on multiples of *half* the pitch (measured: the shortest
+  edge of a default embedding is 10 or 20);
+- z lies on Reapr's integer levels, by default stretched so the z extent is
+  `reapr-scaling` (1.0) times the smaller of the x and y extents, so z is
+  often not a whole number.
+
+`"EmbeddingGridSize"` sets all three spacings (`--x-grid-size`,
+`--y-grid-size`, `--z-grid-size`; see the options table). With an even size,
+e.g. `"EmbeddingGridSize" -> 2`, every coordinate is an integer: a lattice
+knot, which the 3D input options can then project exactly from any side.
+Measured 2026-11-11 (paclet-built 1.2.0 tools, trefoil):
+
+| flags | z levels | bounding box (x, y, z) |
+|---|---|---|
+| (default) | −40, 0, 40 | 80, 80, 80 |
+| `--z-grid-size=20` | −20, 0, 20 | 80, 80, 40 |
+| `--reapr-scaling=0.5` | −20, 0, 20 | 80, 80, 40 |
+| `--x-grid-size=10 --y-grid-size=10` | −20, 0, 20 | 50, 40, 40 |
+
+(Single runs; the layout is random, so extents vary from run to run.)
+
+### Side views
+
+The embedding's z-projection is (up to the layout) the diagram Reapr laid
+out; its x- and y-projections are different diagrams of the same link. The
+CLI pipes `knoodledraw --embedding | knoodledraw --projection=x`; the WL
+equivalent takes the points out of the `Graphics3D`:
+
+```wl
+g = KnoodleDraw[Knot[5, 2], "DrawingDimension" -> 3, "EmbeddingGridSize" -> 2];
+lattice = Cases[g, Tube[p_, _] :> Most[p], Infinity][[1]];
+KnoodleDraw[lattice, "Projection" -> #, "Simplify" -> False, "ExactInput" -> True] & /@ {"X", "Y", "Z"}
+```
+
+Measured on five such lattices of 5_2: x/y/z views of 7–13 / 9–13 / 5–6
+crossings, and `KnoodleIdentify` names 5_2 from every view. Two views can
+occasionally coincide, so the reference page says "generally" different.
+
 ### Randomization — what tests may and may not assert
 
-The run is randomized twice over: Reapr defaults to `permute_randomQ`, and
-`--embedding` additionally applies a random rotation. Two runs on one input
-give different — equally valid — coordinates, and **the vertex count varies
-too**. Assert on component counts, colors, and topology; never on coordinates
-or point counts.
+The run is randomized: Reapr defaults to `permute_randomQ`, and its OrthoDraw
+layout randomizes bends. Two runs on one input give different — equally
+valid — coordinates, and **the vertex count varies too**. Assert on component
+counts, colors, and topology; never on coordinates or point counts.
 
-**`SeedRandom` does not pin it** (measured 2026-08-04). Both sources of
-randomness live in the `knoodledraw` *process*, not in the WL kernel, so the
-paclet has no handle on them: three calls under one `SeedRandom[21]` gave
-27-, 23-, and 25-vertex trefoils. `"RandomizeProjection" -> False` does not
-help either — it suppresses the *projection* shear, which is a different knob
-from Reapr's permutation and `--embedding`'s rotation (measured: 23 vs 25
-vertices with the flag off). So, unlike the 2D path — where
-`"RandomizeProjection" -> False` *is* fully reproducible, verified by hashing
-two identical calls — **dimension 3 currently has no reproducible mode at
-all**. Consequences:
+**No seed pins it.** Knoodle 1.2's `--seed` (the paclet's `RandomSeeding`)
+reaches Reapr's own engine but not the OrthoDraw layout inside it, which seeds
+itself from `std::random_device`: two `knoodledraw --embedding --seed=7` runs on
+one trefoil gave 26 and 20 vertices (measured 2026-11-11). The CLI help says
+so: since Knoodle 1.2.1 it lists what `--seed` cannot reach, "the layout's own
+random choices", namely `--randomize-bends`, `--randomize-virtual-edges`, and
+the layout inside every `--embedding` run. (1.2.0's help named only the
+`--embedding` case.) By contrast, an
+unsimplified random projection *does* repeat under a fixed seed (verified:
+three `-s=0 --projection=random --seed=5` runs on a 200-gon, identical
+output), so 2D drawings of `"Simplify" -> False` input are reproducible with
+`RandomSeeding -> n`. Consequences:
 
 - Doc-notebook regeneration draws different 3D curves every run. That is
-  accepted, not a bug to chase; the reference-page examples deliberately carry
-  no `SeedRandom`, since one would only imply a determinism that does not
-  exist. (Note the 2D examples' `SeedRandom` calls are decorative for the same
-  reason wherever `"RandomizeProjection"` is left at its `True` default.)
+  accepted, not a bug to chase; the 3D reference-page examples deliberately
+  carry no `SeedRandom`. The generators do set
+  `SetOptions[..., RandomSeeding -> Inherited]` (invisibly), so their
+  `SeedRandom` calls now pin the 2D projections that used to be decorative.
 - Any test must assert on topology alone.
-- Worth an upstream ask: a `--seed` flag on `knoodledraw` would make both the
-  docs and any regression test deterministic. Not yet requested.
-
-The rotation is a deliberately temporary upstream workaround (Reapr takes x
-and y straight off the OrthoDraw grid, so the over/under jump at a crossing is
-an exactly vertical edge that projects to a point, which `FindIntersections`
-rejects). Henrik's Prosector work replaces it with a virtually isometric
-projection, after which axis-aligned output becomes possible — so **nothing
-in the paclet may depend on the embedding being rotated**.
+- Making the embedding reproducible needs a `src/` change (OrthoDraw's engine
+  seeded from Reapr's) — Henrik's code; not requested.
 
 ### Rendering
 
@@ -283,10 +334,14 @@ in the paclet may depend on the embedding being rotated**.
   `ColorData[97][idx["Color"]]`.
 - **Tube radius** (`embeddingRadius`): two scales compete. Tubes must not
   merge, which bounds the radius by the embedding's pitch — every edge is a
-  whole number of Reapr grid pitches and non-adjacent strands stay a full
-  pitch apart (measured: min edge = min non-adjacent segment separation =
-  10.0 exactly, on all three handoff samples), so the shortest edge measures
-  the pitch and pitch/3 still leaves a third of a pitch of daylight. But tubes
+  whole number of grid steps and non-adjacent strands stay at least one step
+  apart, so the shortest edge measures the pitch and pitch/3 still leaves a
+  third of a pitch of daylight. Measured: min edge = min non-adjacent segment
+  separation, exactly, on the three handoff samples (10.0) and again on the
+  unrotated 1.2 output for 3_1, 5_2, 8_2 at the default grid (10 or 20), at
+  `"EmbeddingGridSize" -> {Automatic, Automatic, 2}` (2) and at
+  `"EmbeddingGridSize" -> 2` (1 or 2) — a small z spacing lowers the bound
+  with it, and the radius follows (0.25–0.67 there). But tubes
   must also stay *visible*, and the embedding's extent grows with the crossing
   number while its pitch does not — a fixed multiple of the pitch draws 8_2 as
   hairlines at the `ImageSize` that suits a trefoil (8_2's bounding box is ~5×
@@ -309,39 +364,44 @@ in the paclet may depend on the embedding being rotated**.
 
 ### Which options apply
 
-`"Simplify"`, `"RandomizeProjection"`, `ImageSize`, `"Thickness"`, and
-`PlotLegends` all apply. The 2D layout/decoration options —
-`"Checkerboard"`, `"Labels"`, `LabelStyle`, `"ExteriorFace"`,
-`"Orientation"` — have no meaning for an embedding and are ignored
-(`--exterior-face` is not even sent). Reapr's own knobs are reached through
-the existing `"LayoutOptions"` passthrough:
+`"Simplify"`, the 3D input options (`"Projection"`, `"RandomizeProjection"`,
+`"ExactInput"`, `RandomSeeding` — they act on the *input*, before any
+embedding), `ImageSize`, `"Thickness"`, and `PlotLegends` all apply, and so do
+the two dimension-3-only options `"EmbeddingGridSize"` and `"ReaprEnergy"`.
+The 2D layout/decoration options — `"Checkerboard"`, `"Labels"`, `LabelStyle`,
+`"ExteriorFace"`, `"Orientation"` — have no meaning for an embedding and are
+ignored (`--exterior-face` is not even sent). Reapr's remaining knob is
+reached through the `"LayoutOptions"` passthrough:
 
 ```wl
-KnoodleDraw[Knot[4, 1], "DrawingDimension" -> 3,
-  "LayoutOptions" -> {"reapr-energy" -> "height", "reapr-scaling" -> 2.0}]
+KnoodleDraw[Knot[4, 1], "DrawingDimension" -> 3, "ReaprEnergy" -> "Height",
+  "LayoutOptions" -> {"reapr-scaling" -> 2.0}]
 ```
 
-`--reapr-scaling` defaults to `1.0`. For `--reapr-energy`, use only **`tv`
-(default), `height`, `tv_mcf`** — the same three `KnoodleSimplify`'s
-`"ReaprEnergy"` validates against, and for the same reason: `dirichlet` and
-`bending` need a `KNOODLE_USE_UMFPACK` build and `tv_clp` needs
-`KNOODLE_USE_CLP`, neither compiled into the paclet's bundled binaries. See
-`markdown-docs/KnoodleSimplify.md` for the full account.
+`--reapr-scaling` defaults to `1.0`; it and a z grid size both set the z
+spacing, and `knoodledraw` refuses the pair (`KnoodleDraw::knoodletool`:
+"--z-grid-size and --reapr-scaling both set the z spacing; use one or the
+other").
 
-Note the failure mode, which is why the example above does not use
-`dirichlet`: an unavailable energy is **not** an error. The tool warns on
-**stderr** and silently proceeds with TV — and the paclet reads only
-`"StandardOutput"`, so the warning is discarded and the user sees a perfectly
-good embedding computed with an energy they did not ask for. Verified
-2026-08-04 on all six values: `tv`, `height`, `tv_mcf` run clean; `dirichlet`,
-`bending`, `tv_clp` warn and fall back. (`tv_clp`'s fallback is benign — the
-warning says CLP solves the same problem, just faster.)
+Not exposed: `-q`/`--quiet` (Knoodle 1.2) — the paclet never shows the tools'
+stderr except to quote a failure, and quieting it would only remove context
+from those quotes.
 
-Unlike `KnoodleSimplify`, `KnoodleDraw` does **not** validate this: these knobs
-are reached through the untyped `"LayoutOptions"` passthrough, which
-deliberately forwards whatever it is given. Promoting `"ReaprEnergy"` to a
-named, validated option on `KnoodleDraw` too would close the gap — worth doing
-if anyone actually reaches for these.
+### Energies
+
+`"ReaprEnergy"` (since paclet 1.2 a named option here too, validated like
+`KnoodleSimplify`'s) accepts only **`"TV"` (default), `"Height"`,
+`"TV_MCF"`**: `Dirichlet` and `Bending` need a `KNOODLE_USE_UMFPACK` build and
+`TV_CLP` needs `KNOODLE_USE_CLP`, neither compiled into the paclet's bundled
+binaries. Knoodle 1.2's `--help` lists "this build's" energies, but the tool
+still *parses* all six, and an unavailable one is **not** an error: the tool
+warns on stderr ("Energy_T::Dirichlet is only supported if compiled with
+UMFPACK support ... Using default (Energy_T::TV) instead"; re-verified
+2026-11-11) and silently proceeds with TV — and the paclet does not show
+stderr on success, so the user would get a perfectly good embedding computed
+with an energy they did not ask for. Hence the WL-side refusal
+(`KnoodleDraw::badenergy`). A value passed through `"LayoutOptions"` instead
+still bypasses it.
 
 ### Gating
 
@@ -436,8 +496,11 @@ and complicated diagrams.
   ways — default, `"LayoutOptions" -> {"compaction" -> "topo-order"}`, and
   `{"randomize-bends" -> 4}` — to show that the code determines the diagram
   but not the drawing. The randomize-bends panel differs between doc
-  regenerations (the randomness lives in the C++ tool, not WL's
-  `SeedRandom`).
+  regenerations, even though the generators now pass a seed: `--seed` does
+  not reach OrthoDraw's bend randomization in 2D either (three
+  `--randomize-bends=4 --seed=5` runs on one trefoil, three different
+  drawings; checked 2026-11-11 on 1.2.0. Since 1.2.1 the CLI help names
+  this case too; 1.2.0's named only `--embedding`).
 
 ## Example
 
@@ -492,3 +555,38 @@ KnoodleDraw[K, "DrawingDimension" -> 3]
 Geometric repair: an awful random 50-gon, then the same knot re-embedded on
 Reapr's grid, then the proof that both are the trefoil. See "Geometric repair"
 above for the measurements and for why that seed.
+
+```
+KnoodleDraw[Knot[5, 2], "Projection" -> #, "Simplify" -> False] & /@ {"X", "Y", "Z"}
+```
+
+Knoodle 1.2's exact projections: KnotData's 5_2 curve seen down the x, y and z
+axes, each drawn without simplification, so the crossing counts differ. (`"X"` and
+`"Y"` permute the axes cyclically; `"Random"` is a uniformly random rotation.)
+
+```
+KnoodleDraw[Knot[5, 2], "Simplify" -> False, RandomSeeding -> #] & /@ {1, 1, 2}
+```
+
+A fixed seed repeats a random projection exactly; another seed gives another
+diagram.
+
+```
+KnoodleDraw[Knot[5, 2], "Projection" -> "Z", "ExactInput" -> True]
+```
+
+`KnotData` coordinates are floats, so `"ExactInput"` refuses them
+(`KnoodleDraw::knoodletool`, quoting the tool's "--exact-input: rounding the
+coordinates ..." error) and returns `$Failed`.
+
+```
+g = KnoodleDraw[Knot[5, 2], "DrawingDimension" -> 3, "EmbeddingGridSize" -> 2];
+lattice = Cases[g, Tube[p_, _] :> Most[p], Infinity][[1]];
+KnoodleDraw[lattice, "Projection" -> #, "Simplify" -> False, "ExactInput" -> True] & /@ {"X", "Y", "Z"}
+KnoodleIdentify[lattice, "Projection" -> #] & /@ {"X", "Y", "Z"}
+```
+
+A lattice knot from Reapr, its three side views, and the check that every view
+is 5_2 (see "Side views" above). The reference page also shows the z spacing
+`"EmbeddingGridSize" -> {Automatic, Automatic, s}` for s = 5, 20, 60 from the
+front.

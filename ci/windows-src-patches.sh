@@ -9,8 +9,8 @@
 # This file is intentionally the single source of truth for "what still needs
 # fixing upstream to build Knoodle on Windows."
 #
-# Currently: nothing. The list is empty and the Windows build compiles against
-# unmodified Knoodle. Keep the harness -- the next portability wart goes here.
+# Currently: nothing. Knoodle v1.2.1 builds on Windows as it is. Keep the
+# harness -- the next portability wart goes here.
 #
 set -euo pipefail
 KND="${KND:-Knoodle}"
@@ -39,5 +39,20 @@ apply () {  # description  file  sed-expr  match-pattern
 #     it, so it only broke the Windows target. Henrik made the change himself
 #     rather than merging PR #17 -- Bends.hpp:165 is `<int>` upstream, with a
 #     comment recording the constraint. Removed 2026-08-07.
+# P2: Tools src/TypeName.hpp, PrettyTypeName's last branch was a bare `#elif`
+#     where `#else` was meant; clang targeting MSVC reached it and failed with
+#     "expected value in expression". P3: Tools src/ToString.hpp formatted
+#     Int128 with std::format, and MSVC's STL has no std::formatter<__int128>.
+#     Both were carried on the paclet's knoodle-1.1.1 branch and fixed upstream
+#     in Tools PR #5 (the _MSVC_STL_VERSION guard), which Knoodle v1.2.0 pins.
+#     Never on paclet main; retired at the v1.2.0 repin, 2026-11-11.
+# (Never a patch) Tools src/OutString.hpp passed path::c_str() as a char string,
+#     but MSVC's path holds wchar_t, so Knoodle v1.2.0 did not build on Windows.
+#     Deliberately NOT patched here (JHC, 2026-11-11): the Windows jobs stayed red
+#     until Henrik merged the fix, designbynumbers/Tools PR #6 (Tools 00b58fa).
+#     Knoodle v1.2.1 pins it; Windows is green again from the v1.2.1 repin,
+#     2026-11-12.
+#     (The compiler-rt builtins link in ci/build-tools.sh is NOT a src patch and
+#     stays: Int128 <-> double conversions still need it on Windows.)
 
 echo "=== no temporary Windows src patches needed ==="

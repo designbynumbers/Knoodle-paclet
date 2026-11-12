@@ -8,6 +8,9 @@ Get[FileNameJoin[{$repo, "Kernel", "Knoodle.wl"}]];
 (* Register the source checkout as a paclet so AssetLocation lookups in the
    examples resolve during generation, same as on an installed paclet. *)
 PacletDirectoryLoad[$repo];
+(* The generator's SeedRandom calls seed the tools too (see the same line in
+   gen-knoodledraw-nb.wls); Reapr's bend randomization stays unseeded. *)
+SetOptions[#, RandomSeeding -> Inherited] & /@ {KnoodleDraw, KnoodleSimplify, KnoodleIdentify};
 
 $out    = FileNameJoin[{$repo, "Documentation", "English", "ReferencePages", "Symbols", "KnoodleIdentify.nb"}];
 $review = FileNameJoin[{$TemporaryDirectory, "knoodle-doc-review"}]; Quiet[CreateDirectory[$review]];
@@ -57,30 +60,54 @@ sum, so it is simply omitted."],
    notes["input accepts the same representations as KnoodleDraw. The lookup \
 is self-contained: it decomposes and simplifies internally, so input need not \
 be simplified first."],
-   notes["A summand with more crossings than the lookup table covers comes \
-back as Unidentified[n, pd] -> multiplicity, where pd is the summand's own \
-signed PD code, for offline analysis. A summand inside the table's range \
-that still fails to resolve comes back as NotFound[n, pd] -> multiplicity \
-instead."],
+   notes["A summand with more crossings than the lookup covers (the table's \
+13, or \"MaxCrossings\") comes back as Unidentified[n, pd] -> multiplicity, \
+where pd is the summand's own signed PD code, for offline analysis. A summand \
+inside the lookup range that still fails to resolve comes back as \
+NotFound[n, pd] -> multiplicity instead, with a KnoodleIdentify::notfound \
+warning: it points to a gap in the tables or a hard simplification case."],
+   notes["If knoodleidentify itself fails -- for instance because its KLUT \
+tables are missing, damaged or from another table set -- KnoodleIdentify \
+returns $Failed with a KnoodleIdentify::knoodletool message quoting the \
+tool's error."],
    notes["KnoodleIdentify only identifies knots. A genuine link (more than \
 one component) fails with $Failed and a KnoodleIdentify::link message; apply \
 KnoodleSimplify with \"Unite\" -> True first if the components should be \
 treated as connect-summed into a single knot."],
-   notes["3D geometry is randomly rotated before being projected to a \
-diagram, as in KnoodleDraw and KnoodleSimplify -- without this a highly \
-symmetric curve can hit a degenerate projection and fail. Set \
-\"RandomizeProjection\" -> False for the plain z-axis projection; if the \
-projection then degenerates, KnoodleIdentify returns $Failed with a \
-KnoodleIdentify::failed message."],
+   notes["3D geometry is projected to a diagram as in KnoodleDraw and \
+KnoodleSimplify: after a uniformly random rotation by default, or straight \
+down one axis with \"Projection\" -> \"X\", \"Y\" or \"Z\". The projection is \
+exact, so even a highly symmetric curve viewed along an axis projects \
+correctly. \"ExactInput\" -> True refuses floating-point coordinates that \
+would have to be rounded onto Knoodle's integer grid, and RandomSeeding \
+seeds the random projection and the Reapr embeddings tried during \
+escalation (all but the bend randomization of their planar layout)."],
+   notes["KnoodleIdentify always tells knoodleidentify where the paclet's \
+own KLUT tables are, so an environment variable or a separate Knoodle \
+installation cannot substitute other tables. The tool checks the tables \
+against the manifest shipped with them before every run."],
    notes["The following options can be given:"],
    Cell[BoxData[GridBox[{
       optRow[ToBoxes["MaxCrossings"], "Automatic",
        "restrict the lookup to subtables with at most this many crossings \
 (3 to 13); Automatic is the table's full range. Knots above a restricted \
-range come back as NotFound."],
+range come back as Unidentified."],
+      optRow[ToBoxes["Projection"], "Automatic",
+       "how 3D input is projected to a diagram: \"X\", \"Y\" or \"Z\" \
+straight down that axis, \"Random\" after a uniformly random rotation; \
+Automatic is \"Random\", or \"Z\" when \"RandomizeProjection\" -> False"],
       optRow[ToBoxes["RandomizeProjection"], "True",
-       "randomly rotate 3D input before projecting, avoiding degenerate \
-projections; set False for reproducibility"]
+       "the older switch for \"Projection\": False projects straight down the \
+z axis"],
+      optRow[ToBoxes["ExactInput"], "False",
+       "True refuses 3D input that cannot be projected exactly, instead of \
+rounding it onto an integer grid"],
+      optRow["RandomSeeding", "Automatic",
+       "seed for the tool's random choices: an integer or string, Inherited \
+to follow SeedRandom, or Automatic for a fresh seed every call"],
+      optRow[ToBoxes["IdentifyOptions"], RowBox[{"{", "}"}],
+       "extra knoodleidentify flags, e.g. {\"escalation-rounds\" -> 6, \
+\"reapr-energy\" -> \"Height\"}; see knoodleidentify --help"]
       }]], "3ColumnTableMod"]
    }, Open]];
 
@@ -176,8 +203,8 @@ is sampled as a space curve:"],
 SeedRandom[42];
 ex7 = {
    delim,
-   text["Restricting \"MaxCrossings\" below a knot's crossing number forces \
-a NotFound result:"],
+   text["Restricting \"MaxCrossings\" below a knot's crossing number leaves \
+it Unidentified:"],
    group[HoldForm[KnoodleIdentify[Knot[5, 1], "MaxCrossings" -> 3]]]};
 
 ex8 = {

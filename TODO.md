@@ -1,6 +1,9 @@
 # Knoodle-paclet TODO
 
-## Upstream (handed off): knoodlesimplify segfaults on a malformed .kndlxyz
+## RESOLVED in Knoodle 1.2.0 (checked 2026-11-11): knoodlesimplify segfaults on a malformed .kndlxyz
+
+A malformed `.kndlxyz` now gives a clean exit 1 with a "Refusing to write"
+error and a diagnostic report; no segfault. Original note:
 
 Found 2026-07-03 while building the link doc example: a `.kndlxyz` file that
 fails to parse logs `ReadFromFile: Reading file failed` and then dies with
@@ -10,7 +13,11 @@ the returned invalid LinkEmbedding. Handed off:
 No paclet follow-up needed once fixed (the WL wrappers now message on
 empty/failed tool output).
 
-## KLUT 14-16-crossing NotFound quirk — NO ACTION (decision 2026-07-03)
+## RESOLVED in Knoodle 1.2.0 (checked 2026-11-11): KLUT 14-16-crossing NotFound quirk
+
+A (2,15) torus knot now comes back `Unidentified[15, pd]` (and (2,17) still
+gives `Unidentified[17, pd]`), so the classification follows the tables that
+are actually loaded. Original note (decision 2026-07-03):
 
 Found while writing the KnoodleIdentify reference page:
 `Klut::max_crossing_count` is already 16 in `src/Klut.hpp` but the data

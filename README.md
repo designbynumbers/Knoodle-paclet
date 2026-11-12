@@ -24,7 +24,7 @@ install.
    ```
 
    replacing the path with wherever your browser saved the file (on macOS
-   typically `"~/Downloads/Knoodle-0.9.0.paclet"`). You can also skip the
+   typically `"~/Downloads/Knoodle-1.2.1.paclet"`). You can also skip the
    manual download and hand `PacletInstall` the release asset's URL
    directly — right-click the file on the Releases page and copy its link.
 3. Check that it works:

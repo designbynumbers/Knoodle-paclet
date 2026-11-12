@@ -13,6 +13,7 @@ cache).
 | `gen-knoodledraw-nb.wls` | `KnoodleDraw.nb` |
 | `gen-knoodlesimplify-nb.wls` | `KnoodleSimplify.nb` |
 | `gen-knoodleidentify-nb.wls` | `KnoodleIdentify.nb` |
+| `gen-knoodleprove-nb.wls` | `KnoodleProve.nb` (examples check the traces in `Resources/ExampleData/Traces`) |
 | `gen-knotsymbol-nb.wls` | `KnotSymbol.nb` |
 | `gen-drawpd-gallery.wls` | `Resources/ExampleData/DrawPDGallery/*.png` (assets, not a page) |
 
@@ -59,12 +60,16 @@ they would on an installed paclet.
 Notes:
 
 - **Re-running changes the committed notebooks**: timings (`AbsoluteTiming`
-  outputs) and any layout produced through `--randomize-projection` (whose
-  randomness lives in the C++ tools, not WL's `SeedRandom`) will differ
-  between runs. Regenerate deliberately — after a Kernel or upstream change
-  that affects outputs — and review the diff, not habitually.
+  outputs), every 3D embedding, every full (level 6) simplification, and
+  any `"randomize-bends"` layout will differ between runs. The generators set
+  `SetOptions[..., RandomSeeding -> Inherited]` (since Knoodle 1.2), so each
+  example's `SeedRandom` now also pins the C++ tools' random *projections*;
+  what stays unseeded is OrthoDraw's bend randomization, inside Reapr and in
+  2D alike (Knoodle `handoff/seedable-simplifier-randomness`). Regenerate
+  deliberately — after a Kernel or upstream change that affects outputs —
+  and review the diff, not habitually.
 - `gen-knoodledraw-nb.wls` also exports each graphical example output as a
   PNG under `$TemporaryDirectory/knoodle-doc-review/` for eyeballing.
 - After regenerating, validate with
   `PacletTools`PacletDocumentationBuild["<repo>", "<tmp dir>"]` — expect
-  `SuccessfulFilesCount -> 5`, `FailedFilesCount -> 0`.
+  `SuccessfulFilesCount -> 6`, `FailedFilesCount -> 0`.

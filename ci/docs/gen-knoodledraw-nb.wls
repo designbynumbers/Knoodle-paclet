@@ -19,6 +19,11 @@ Get[FileNameJoin[{$repo, "Kernel", "Knoodle.wl"}]];
 (* Register the source checkout as a paclet so AssetLocation lookups in the
    examples resolve during generation, same as on an installed paclet. *)
 PacletDirectoryLoad[$repo];
+(* Let the generator's own SeedRandom calls seed the tools too (Knoodle >= 1.2
+   takes --seed), so regenerating redraws the same random projections. Not
+   shown on the page, and not total: the bend randomization of Reapr's
+   layout (simplify level 6+, and every embedding) is out of a seed's reach. *)
+SetOptions[#, RandomSeeding -> Inherited] & /@ {KnoodleDraw, KnoodleSimplify, KnoodleIdentify};
 
 $out    = FileNameJoin[{$repo, "Documentation", "English", "ReferencePages", "Symbols", "KnoodleDraw.nb"}];
 $review = FileNameJoin[{$TemporaryDirectory, "knoodle-doc-review"}]; Quiet[CreateDirectory[$review]];
@@ -47,6 +52,17 @@ group[h_HoldForm] := Module[{res = ReleaseHold[h]},
    Export[FileNameJoin[{$review, "ex" <> ToString[$png] <> ".png"}], res, ImageResolution -> 100]];
   Cell[CellGroupData[{inCell[h], Cell[BoxData[ToBoxes[res]], "Output"]}, Open]]];
 silent[h_HoldForm] := (ReleaseHold[h]; inCell[h]);
+(* Evaluate, keeping the messages: Input, one "Message" cell per message, then
+   the Output. A failed tool run names its diagnostic report by a path in this
+   machine's temporary directory; only the file name goes on the page. *)
+msgGroup[h_HoldForm] := Module[{ed = EvaluationData[ReleaseHold[h]]},
+  Cell[CellGroupData[Join[{inCell[h]},
+     Cell[StringReplace[#, {
+          RegularExpression["Diagnostic report: \\S*/"] -> "Diagnostic report: \[Ellipsis]/",
+          RegularExpression["\n\\s+"] -> "\n",                 (* MessagesText's line indent *)
+          RegularExpression["^(\\S+::\\S+) : "] -> "$1: "}],
+        "Message", "MSG"] & /@ ed["MessagesText"],
+     {Cell[BoxData[ToBoxes[ed["Result"]]], "Output"]}], Open]]];
 text[s_]  := Cell[s, "ExampleText"];
 delim     := Cell["", "ExampleDelimiter"];
 notes[s_] := Cell[s, "Notes"];
@@ -106,6 +122,27 @@ randomized, so repeated calls give different curves, with different numbers \
 of vertices, of the same link. The diagram options (\"Checkerboard\", \
 \"Labels\", LabelStyle, \"ExteriorFace\", \"Orientation\") do not apply to \
 it; \"Thickness\" is then a tube radius in the embedding's own coordinates."],
+   notes["The embedding lies on a grid: its edges run parallel to the axes, x \
+and y on the grid of a planar layout (pitch 20 by default, vertices on \
+multiples of half the pitch) and z on integer levels, by default stretched \
+until the curve is as tall as it is wide. \"EmbeddingGridSize\" -> n sets all \
+three spacings to n, and {nx, ny, nz} sets them separately; Automatic keeps \
+the default for that axis. An even grid size gives integer coordinates."],
+   notes["3D input is projected to a diagram after a uniformly random rotation \
+by default, which keeps the projection generic. \"Projection\" -> \"X\", \
+\"Y\" or \"Z\" projects straight down that axis instead; the projection is \
+exact, and degenerate configurations such as edges parallel to the axis are \
+resolved without moving the curve. \"RandomizeProjection\" -> False, the \
+older form of the option, is the same as \"Projection\" -> \"Z\". \
+Floating-point coordinates are rounded onto an integer grid first; \
+\"ExactInput\" -> True refuses input that would need it. These options have \
+no effect on PD codes, which are already diagrams."],
+   notes["RandomSeeding -> n seeds the random choices of the Knoodle tools \
+with the integer n, so the same seed gives the same random projection; \
+RandomSeeding -> Inherited takes the seed from Wolfram's own generator, so \
+that SeedRandom governs it. The default, Automatic, draws a fresh seed for \
+every call. The random layout of the 3D embedding (\"DrawingDimension\" -> 3, \
+and the Reapr stage of simplification) is not governed by the seed."],
    notes["Labels are set in Source Sans Pro at the largest size at which \
 every label fits its allotted space, uniformly across all diagrams of the \
 output. LabelStyle styles the label text (family, weight, color, \
@@ -141,15 +178,31 @@ explicit ImageSize sets the overall drawing scale"],
       optRow["PlotLegends", "None",
        "Automatic adds a LineLegend matching component colors to component \
 numbers"],
+      optRow[ToBoxes["Projection"], "Automatic",
+       "how 3D input is projected to a diagram: \"X\", \"Y\" or \"Z\" \
+straight down that axis, \"Random\" after a uniformly random rotation; \
+Automatic is \"Random\", or \"Z\" when \"RandomizeProjection\" -> False"],
       optRow[ToBoxes["RandomizeProjection"], "True",
-       "randomly rotate 3D input before projecting, avoiding degenerate \
-projections; set False for reproducibility"],
+       "the older switch for \"Projection\": False projects straight down the \
+z axis"],
+      optRow[ToBoxes["ExactInput"], "False",
+       "True refuses 3D input that cannot be projected exactly, instead of \
+rounding it onto an integer grid"],
+      optRow["RandomSeeding", "Automatic",
+       "seed for the tools' random choices: an integer or string, Inherited \
+to follow SeedRandom, or Automatic for a fresh seed every call"],
       optRow[ToBoxes["LayoutOptions"], RowBox[{"{", "}"}],
        "extra knoodledraw layout flags, e.g. {\"randomize-bends\" -> 3}; see \
 knoodledraw --help"],
       optRow[ToBoxes["DrawingDimension"], "2",
        "2 draws the planar diagram; 3 returns a Graphics3D of a 3D embedding \
 of the same link -- one tube per link component"],
+      optRow[ToBoxes["EmbeddingGridSize"], "Automatic",
+       "grid spacing of the 3D embedding: n for all three axes, or {nx, ny, \
+nz}; Automatic keeps the defaults"],
+      optRow[ToBoxes["ReaprEnergy"], "Automatic",
+       "energy the 3D embedding's layout minimizes: \"TV\" (the default), \
+\"Height\", or \"TV_MCF\""],
       optRow["ImageSize", "340",
        "size of the resulting Graphics; with several diagrams, the size of \
 the widest (the rest are proportionally smaller, at a common scale)"]
@@ -231,6 +284,32 @@ number:"],
    (SeedRandom[5]; group[HoldForm[KnoodleDraw[{c1, c2}, PlotLegends -> Automatic,
        ImageSize -> 250]]])};
 
+(* ---- how 3D input is projected (Knoodle >= 1.2) ---- *)
+exP1 = {
+   delim,
+   text["3D input is projected to a diagram after a uniformly random \
+rotation by default. \"Projection\" -> \"X\", \"Y\" or \"Z\" projects \
+straight down that axis instead, exactly. Here are the raw projections, \
+unsimplified, of KnotData's curve for the knot 5_2 down its three axes:"],
+   group[HoldForm[Row[KnoodleDraw[Knot[5, 2], "Projection" -> #, "Simplify" -> False,
+        ImageSize -> 170] & /@ {"X", "Y", "Z"}, Spacer[15]]]]};
+
+exP2 = {
+   delim,
+   text["A random projection differs from call to call. RandomSeeding fixes \
+it: the same seed gives the same projection, here twice with seed 1 and once \
+with seed 2. RandomSeeding -> Inherited takes the seed from Wolfram's own \
+generator instead, so that SeedRandom governs it:"],
+   group[HoldForm[Row[KnoodleDraw[Knot[5, 2], "Simplify" -> False, RandomSeeding -> #,
+        ImageSize -> 170] & /@ {1, 1, 2}, Spacer[15]]]]};
+
+exP3 = {
+   delim,
+   text["Floating-point coordinates are rounded onto an integer grid before \
+they are projected. \"ExactInput\" -> True refuses input that would need \
+rounding -- which includes KnotData's curves:"],
+   msgGroup[HoldForm[KnoodleDraw[Knot[5, 2], "Projection" -> "Z", "ExactInput" -> True]]]};
+
 ex8b = {
    delim,
    text["Drawing a multi-summand complex gives a list of Graphics at one \
@@ -257,8 +336,8 @@ ex8c = {
 returns a Graphics3D of a 3D embedding of the same link, one tube per link \
 component. Here the knot 8_2 and the Hopf link of the previous example, \
 whose two components keep the colors the diagram gave them:"],
-   (* No SeedRandom here, deliberately: the embedding's randomness lives in the
-      knoodledraw process, not in the WL kernel, so SeedRandom cannot pin it and
+   (* No SeedRandom here, deliberately: the embedding's layout randomizes its
+      bends from a source that neither SeedRandom nor RandomSeeding reaches, so
       writing one would only imply a reproducibility that does not exist. Every
       regeneration of this notebook therefore draws different -- equally valid --
       curves. *)
@@ -302,6 +381,33 @@ the same way:"],
    silent[HoldForm[emb = Cases[KnoodleDraw[K, "DrawingDimension" -> 3],
        Tube[p_, _] :> Most[p], Infinity][[1]];]],
    group[HoldForm[{KnoodleIdentify[K], KnoodleIdentify[emb]}]]};
+
+(* ---- the embedding's grid (Knoodle >= 1.2) ---- *)
+exG1 = {
+   delim,
+   text["The embedding lies on a grid, its edges parallel to the axes. By \
+default the levels are stretched until the curve is as tall as it is wide. \
+\"EmbeddingGridSize\" -> {nx, ny, nz} sets the spacing of the grid instead; \
+Automatic keeps an axis's default. Here 5_2 is seen from the front with its \
+levels 5, 20 and 60 units apart. The horizontal pitch stays at its default \
+of 20, so the middle embedding lies on a cubic grid:"],
+   group[HoldForm[Row[Show[KnoodleDraw[Knot[5, 2], "DrawingDimension" -> 3,
+         "EmbeddingGridSize" -> {Automatic, Automatic, #}, ImageSize -> 170],
+        ViewPoint -> Front] & /@ {5, 20, 60}, Spacer[15]]]]};
+
+exG2 = {
+   delim,
+   text["With an even grid size every coordinate is an integer, so the \
+embedding is a lattice knot:"],
+   group[HoldForm[g = KnoodleDraw[Knot[5, 2], "DrawingDimension" -> 3,
+       "EmbeddingGridSize" -> 2, ImageSize -> 220]]],
+   silent[HoldForm[lattice = Cases[g, Tube[p_, _] :> Most[p], Infinity][[1]];]],
+   text["Integer coordinates can be projected exactly from any side, which \
+\"ExactInput\" -> True confirms. Seen down the x, y and z axes, the lattice \
+curve generally gives three different diagrams, all of the same knot:"],
+   group[HoldForm[Row[KnoodleDraw[lattice, "Projection" -> #, "Simplify" -> False,
+        "ExactInput" -> True, ImageSize -> 170] & /@ {"X", "Y", "Z"}, Spacer[15]]]],
+   group[HoldForm[KnoodleIdentify[lattice, "Projection" -> #] & /@ {"X", "Y", "Z"}]]};
 
 ex9 = {
    delim,
@@ -458,7 +564,8 @@ examplesSection = Cell[CellGroupData[Flatten[{
            "PrimaryExamplesSection"], ""}}], $Line = 0; Null]],
      "PrimaryExamplesSection"],
     silent[HoldForm[Needs["Knoodle`"]]],
-    ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, ex8b, ex8c, ex8d, ex8e, ex9, ex10, ex11,
+    ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, exP1, exP2, exP3, ex8b, ex8c, ex8d, ex8e,
+    exG1, exG2, ex9, ex10, ex11,
     exD1, exD2, exD3, exD4a, exD4b, exD5}], Open]];
 
 (* ---------- assemble + save ---------- *)

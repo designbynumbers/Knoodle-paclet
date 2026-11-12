@@ -102,6 +102,35 @@ jobs:
           done
           exit "$rc"
 
+      # The same 3D check as build.yml: --help says nothing about the exact
+      # Int128 arithmetic that 3D input runs through, and these are the
+      # binaries that ship.
+      - name: Smoke test (3D input through the exact arithmetic)
+        run: |
+          exe=""; [ -f build/knoodlesimplify.exe ] && exe=".exe"
+          if ! out=$("build/knoodlesimplify$exe" --streaming-mode < ci/trefoil-3d.txt 2> smoke-stderr.txt); then
+            echo "--- FAILED: knoodlesimplify exited nonzero"; cat smoke-stderr.txt; exit 1
+          fi
+          printf '%s\n' "$out"
+          n=$(printf '%s\n' "$out" | grep -cE '^[[:space:]]*-?[0-9]' || true)
+          if [ "$n" -ne 3 ]; then echo "--- FAILED: expected 3 crossings, got $n"; exit 1; fi
+          if grep -E 'WARNING|ERROR' smoke-stderr.txt; then echo "--- FAILED: noise on stderr"; exit 1; fi
+          echo "--- ok: 3D trefoil -> 3 crossings, nothing on stderr"
+
+      # knoodleprove, which KnoodleProve wraps, on a bundled trace: a pass move
+      # and a curl removal that together prove a 3-crossing diagram an unknot.
+      - name: Smoke test (knoodleprove on a bundled trace)
+        run: |
+          exe=""; [ -f build/knoodleprove.exe ] && exe=".exe"
+          if ! out=$("build/knoodleprove$exe" Resources/ExampleData/Traces/pass_lasso.trace 2> smoke-stderr.txt); then
+            echo "--- FAILED: knoodleprove exited nonzero"; printf '%s\n' "$out"; cat smoke-stderr.txt; exit 1
+          fi
+          printf '%s\n' "$out"
+          if ! printf '%s\n' "$out" | grep -q '^#verify stream unlink: VERIFIED'; then
+            echo "--- FAILED: no 'stream unlink: VERIFIED' line"; exit 1
+          fi
+          echo "--- ok: pass_lasso.trace proves its input an unlink"
+
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
