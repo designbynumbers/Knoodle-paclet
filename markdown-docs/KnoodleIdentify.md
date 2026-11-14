@@ -36,7 +36,8 @@ Returns an `Association` from each identified knot summand (a
 
 Identical to `KnoodleDraw` — see `KnoodleDraw.md` (KnotData spec, sampled
 `Function`, 3D space curve, list of 3D curves for a link, native Knoodle PD
-code, multi-summand list including `{{}}` for the unknot, KnotTheory
+code numbered from 0 or 1, a SnapPy PD-code string, multi-summand list
+including `{{}}` for the unknot, KnotTheory
 `PD`/`DTCode`/`GaussCode`, or a `PlanarDiagramComplex` from
 `KnoodleSimplify`). The last case is worth calling out specifically: even
 though the underlying `knoodleidentify --help` text says "feed it the SAME

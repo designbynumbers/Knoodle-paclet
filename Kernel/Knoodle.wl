@@ -13,7 +13,9 @@ KnoodleDraw::usage =
 the input yields several diagrams (a PlanarDiagramComplex or other multi-summand input), \
 a list of Graphics sharing one common scale. input may be a KnotData/Knot specification \
 (e.g. {3,1} or \"Trefoil\"), a KnotTheory PD[X[...]] / DTCode / GaussCode, a list of 3D \
-points, or a native Knoodle PD code (rows of 4 or 5 integers). Option \"Simplify\" \
+points, a native Knoodle PD code (rows of 4 to 7 integers, arcs numbered from 0 or from \
+1), or a PD code string as SnapPy prints it, e.g. \"[(1,4,2,5),(3,6,4,1),(5,2,6,3)]\". \
+Option \"Simplify\" \
 (Automatic) controls whether the given diagram is drawn as-is or a simplified diagram of \
 the same knot is drawn. Option \"Checkerboard\" (False) shades the diagram's \
 two-colorable faces. Option \"Labels\" (a subset of {\"Crossings\",\"Arcs\",\"Faces\"}) \
@@ -493,7 +495,37 @@ KnotSymbol /: MakeBoxes[
 toTSV[pts : {{_?NumericQ, _?NumericQ, _?NumericQ} ..}] := {ExportString[N[pts], "TSV"], True};
 toTSV[f_Function] := toTSV[Most@Table[f[t], {t, 0., 2 Pi, 2 Pi/160}]];
 toTSV[spec : {_Integer, _Integer}] := toTSV[KnotData[spec, "SpaceCurve"]];
-toTSV[name_String] := toTSV[KnotData[name, "SpaceCurve"]];
+(* A String is either a SnapPy-style PD code or a KnotData name. SnapPy prints
+   a PD code as "[(1,2,3,4),(5,6,7,8),...]" -- parenthesized tuples, bracketed
+   ones from PD_code() itself, and arbitrary whitespace and line breaks once it
+   has been copied out of a session. Recognizing it here rather than teaching
+   the C++ tools a second input format keeps this a pure Wolfram-side concern:
+   snappyPDRows lowers the string to the plain list-of-rows PD above, so it
+   inherits that path's index detection and everything downstream of it.
+
+   The two cases can't collide: no KnotData name contains a bracket, and
+   snappyPDStringQ requires at least one bracketed tuple with the whole string
+   consisting of nothing else. Dispatching inside one definition rather than
+   with a second, guarded _String rule keeps it independent of how WL happens
+   to order two overlapping patterns. *)
+snappyPDStringQ[s_String] := StringMatchQ[s, RegularExpression[
+   "\\s*[\\[(]?\\s*(?:[\\[(]\\s*-?\\d+(?:\\s*,\\s*-?\\d+){3,6}\\s*[\\])]\\s*,?\\s*)+[\\])]?\\s*"]];
+snappyPDStringQ[_] := False;
+
+(* Deliberately not ToExpression: snappyPDStringQ has already established that
+   every token here matches -?\d+, so reading the digits directly is both
+   sufficient and free of the risk of evaluating whatever a pasted string
+   happens to contain. *)
+snappyInt[t_String] :=
+  If[StringStartsQ[t, "-"], -FromDigits[StringDrop[t, 1]], FromDigits[t]];
+
+snappyPDRows[s_String] := StringCases[s,
+   ("(" | "[") ~~ Shortest[body__] ~~ (")" | "]") :>
+     snappyInt /@ StringCases[body, RegularExpression["-?\\d+"]]];
+
+toTSV[s_String] := If[snappyPDStringQ[s],
+   toTSV[snappyPDRows[s]],
+   toTSV[KnotData[s, "SpaceCurve"]]];
 toTSV[k_ /; headNameQ[k, "Knot"]] := toTSV[Take[List @@ k, 2]];
 (* Multi-component 3D geometry -- one link component per point list. Knoodle
    only reads this format (blank-line-separated vertex blocks, one component
@@ -504,19 +536,52 @@ toTSV[k_ /; headNameQ[k, "Knot"]] := toTSV[Take[List @@ k, 2]];
 toTSV[components : {{{_?NumericQ, _?NumericQ, _?NumericQ} ..} ..}] := Module[{f = tempFile["knoodle-", ".kndlxyz"]},
   Export[f, StringRiffle[ExportString[N[#], "TSV"] & /@ components, "\n"], "Text"];
   {File[f], True}];
+(* ---- PD arc-label indexing ----
+   Knoodle's PD codes are 0-indexed: n crossings means arc labels exactly
+   0..2n-1, and PlanarDiagram::FromPDCode rejects anything larger outright
+   ("There is an entry greater than number of arcs - 1"), returning an invalid
+   diagram. Most of the rest of the world -- KnotTheory, SnapPy, the printed
+   tables -- numbers arcs 1..2n instead, and a code pasted from any of them used
+   to fail here with a message about the tool's own internals.
+
+   Nothing has to be guessed. A valid code's label set is either {0..2n-1} or
+   {1..2n}, and those two are never the same set: one contains 0, the other
+   contains 2n. Anything else is not a valid PD code in either convention, and
+   is passed through untouched so the tool's own error names the bad crossing.
+
+   Only the first four columns are arc labels. A 5-wide row's fifth column is
+   the crossing sign and a 6- or 7-wide row's last two are component colors
+   (PDCode.hpp); shifting those would corrupt them. *)
+pdIndexBase[rows : {{Repeated[_Integer, {4, 7}]} ..}] :=
+ Module[{labels = Flatten[Take[#, 4] & /@ rows], n = Length[rows]},
+  Which[
+   Min[labels] === 0 && Max[labels] === 2 n - 1, 0,
+   Min[labels] === 1 && Max[labels] === 2 n,     1,
+   True,                                         None]];
+pdIndexBase[_] := None;
+
+pdToZeroIndexed[rows_List] :=
+  If[pdIndexBase[rows] === 1, Join[Take[#, 4] - 1, Drop[#, 4]] & /@ rows, rows];
+
 (* native Knoodle PD: rows of 4 (unsigned), 5 (signed), 6 (unsigned+colors), or
    7 (signed+colors) integers -- one summand. The last two columns, when
    present, are the incoming under-/over-arc's explicit color (see
    PDCode.hpp) -- how a link's components are tagged on the wire, and how
    knoodlesimplify preserves component identity through simplification when
    given colored input (knoodle_io.hpp: colored in -> colored out). *)
-toTSV[pd : {{Repeated[_Integer, {4, 7}]} ..}] := {ExportString[pd, "TSV"], False};
+toTSV[pd : {{Repeated[_Integer, {4, 7}]} ..}] :=
+  {ExportString[pdToZeroIndexed[pd], "TSV"], False};
 (* Multiple summands: a list where each entry is itself a summand's row list, or
    {} for a bare unknot summand (connect-sum factor or split component -- Knoodle's
    wire format doesn't distinguish the two; see knoodle_io.hpp). {{}} is the
-   standalone unknot, the one-summand case of this same pattern. *)
+   standalone unknot, the one-summand case of this same pattern.
+   Each summand carries its own arc labels starting from 0 -- verified against
+   knoodlesimplify's serialization of a two-summand input, where both blocks run
+   0..5 -- so the indexing normalization is applied per summand, not across the
+   whole list. *)
 toTSV[summands : {({{Repeated[_Integer, {4, 7}]} ...} | {}) ..}] := {
-   "k\n" <> StringJoin[("s\n" <> If[# === {}, "", ExportString[#, "TSV"]]) & /@ summands],
+   "k\n" <> StringJoin[
+      ("s\n" <> If[# === {}, "", ExportString[pdToZeroIndexed[#], "TSV"]]) & /@ summands],
    False};
 (* KnotTheory PD[X[i,j,k,l], ...] -> Knoodle 4-col unsigned, 0-indexed (identity slots) *)
 toTSV[p_ /; headNameQ[p, "PD"]] :=
