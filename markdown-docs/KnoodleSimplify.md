@@ -35,7 +35,8 @@ conversion needed, since both of those also go through the same shared
 
 Identical to `KnoodleDraw` — see `KnoodleDraw.md` for the full list
 (KnotData spec, sampled `Function`, 3D space curve, list of 3D curves for a
-link, native Knoodle PD code, multi-summand list including `{{}}` for the
+link, native Knoodle PD code numbered from 0 or 1, a SnapPy PD-code
+string, multi-summand list including `{{}}` for the
 unknot, KnotTheory `PD`/`DTCode`/`GaussCode`, or another
 `PlanarDiagramComplex`).
 

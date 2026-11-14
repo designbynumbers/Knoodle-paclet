@@ -13,7 +13,9 @@ KnoodleDraw::usage =
 the input yields several diagrams (a PlanarDiagramComplex or other multi-summand input), \
 a list of Graphics sharing one common scale. input may be a KnotData/Knot specification \
 (e.g. {3,1} or \"Trefoil\"), a KnotTheory PD[X[...]] / DTCode / GaussCode, a list of 3D \
-points, or a native Knoodle PD code (rows of 4 or 5 integers). Option \"Simplify\" \
+points, a native Knoodle PD code (rows of 4 to 7 integers, arcs numbered from 0 or from \
+1), or a PD code string as SnapPy prints it, e.g. \"[(1,4,2,5),(3,6,4,1),(5,2,6,3)]\". \
+Option \"Simplify\" \
 (Automatic) controls whether the given diagram is drawn as-is or a simplified diagram of \
 the same knot is drawn. Option \"Checkerboard\" (False) shades the diagram's \
 two-colorable faces. Option \"Labels\" (a subset of {\"Crossings\",\"Arcs\",\"Faces\"}) \

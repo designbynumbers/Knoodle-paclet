@@ -10,7 +10,11 @@
    Conventions per src/PlanarDiagram/PDCode.hpp: entry 0 = incoming
    under-arc, then counterclockwise (KnotTheory-compatible); sign +1
    right-handed / -1 left-handed; color columns = incoming under-/over-arc
-   colors. *)
+   colors.
+
+   The SnapPy string in the last example is pd52 with every arc label plus
+   one and the sign column dropped, so it must identify as 5_2 (checked
+   end to end by ci/test-pd-inputs.wls's round trip for 5_2). *)
 
 pdExplainerCells := {
    delim,
@@ -30,5 +34,12 @@ shows the correspondence. Row 1 is crossing 1: the strand enters along arc \
 0, passes under, and continues as arc 1 -- and {0, 5, 1, 6} reads \
 counterclockwise around that crossing, starting from arc 0:"],
    group[HoldForm[KnoodleDraw[pd52, "Orientation" -> True,
-      "Labels" -> {"Crossings", "Arcs"}, ImageSize -> 280]]]
+      "Labels" -> {"Crossings", "Arcs"}, ImageSize -> 280]]],
+   text["PD codes from elsewhere can be used as they are. The KnotTheory` \
+package, SnapPy and the printed knot tables number the arcs from 1 rather \
+than 0; the numbering is recognized from the labels and converted. A PD code \
+copied from SnapPy can be given as a string. Here is the same 5_2, numbered \
+from 1 and without the handedness column, as SnapPy prints it:"],
+   group[HoldForm[KnoodleIdentify[
+      "[(7, 10, 8, 1), (1, 6, 2, 7), (5, 2, 6, 3), (3, 8, 4, 9), (9, 4, 10, 5)]"]]]
    };

@@ -69,7 +69,9 @@ conversion hidden behind the usual templates:
 
 Inputs are normalized on the Wolfram side from the forms people actually have —
 `KnotData`, KnotTheory\`'s `PD[X[...]]` / `PD[Xp[...], Xn[...]]`, DT/Dowker codes,
-Gauss codes, and sampled space curves / polygons — into Knoodle's native input.
+Gauss codes, PD codes as lists numbered from 0 or 1 or as SnapPy prints them
+(`"[(1,4,2,5),(3,6,4,1),(5,2,6,3)]"`), and sampled space curves / polygons — into
+Knoodle's native input.
 
 ## Relationship to Knoodle
 

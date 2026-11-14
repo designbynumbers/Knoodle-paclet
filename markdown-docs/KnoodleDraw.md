@@ -40,7 +40,8 @@ All handled by the internal `toTSV` normalizer, which every one of the
 three public functions shares:
 
 - **KnotData specification**: `Knot[3, 1]`, `{3, 1}`, `"Trefoil"` — anything
-  `KnotData` itself accepts. Internally resolved via
+  `KnotData` itself accepts. (A string is first checked for the SnapPy
+  PD-code form below; no KnotData name can match it.) Internally resolved via
   `KnotData[spec, "SpaceCurve"]` (sampled at 160 points) and then treated as
   a 3D space curve (see below). Default-simplifies (see `"Simplify"` option).
 - **A `Function`**: sampled as a space curve, `f[t]` for
@@ -68,6 +69,31 @@ three public functions shares:
   component identity through simplification/lookup when given colored
   input. Does *not* default-simplify (drawn as-is unless `"Simplify"->True`
   is given explicitly).
+
+  **Arcs may be numbered from 0 or from 1.** Knoodle itself numbers the arcs
+  of an n-crossing diagram 0..2n-1, and the tools reject any label above
+  2n-1 outright (`PlanarDiagram::FromPDCode`: "There is an entry greater than
+  number of arcs - 1"). KnotTheory\`, SnapPy and the printed tables number
+  them 1..2n. `toTSV` (`pdIndexBase`/`pdToZeroIndexed`) accepts both: a valid
+  code's labels are exactly {0..2n-1} or exactly {1..2n}, and the two sets
+  differ (one contains 0, the other 2n), so the numbering is read off the
+  labels, never guessed. A 1-based code is shifted down by one in its first
+  four columns only — the sign and color columns are left alone. A code
+  whose labels fit neither set is invalid either way and is passed through
+  unchanged, so the tool's own error names the bad crossing (and the
+  wrapper returns `$Failed`). Every row of one input must have the same
+  number of columns: the tools reject a mix ("Inconsistent PD code format
+  (expected 7 values per line, got 4)").
+- **SnapPy PD-code string**: a `String` such as
+  `"[(1,4,2,5),(3,6,4,1),(5,2,6,3)]"` — SnapPy's printed form, with
+  parenthesized tuples; `PD_code()`'s bracketed `[[1,4,2,5],...]` works
+  too, as does any whitespace or line breaks picked up copying it out of a
+  session. Tuples may have 4 to 7 entries, numbered from 0 or 1 as above.
+  `snappyPDStringQ` recognizes the form (one or more bracketed integer
+  tuples and nothing else); `snappyPDRows` reads the digits directly —
+  deliberately not `ToExpression`, so a pasted string is never evaluated —
+  and the result goes down the native PD path above. Any other string is a
+  KnotData name. Does not default-simplify.
 - **Multiple summands**: a list where each entry is itself a summand's row
   list (as above), or `{}` for a bare unknot summand. Represents a
   connect-sum factorization or a split link — Knoodle's own wire format
@@ -75,7 +101,11 @@ three public functions shares:
   for how that distinction actually gets made). `{{}}` (a list containing
   one empty summand) is the standalone unknot — this is the one-summand
   degenerate case of this same pattern, so no special-casing was needed to
-  support it. Does not default-simplify.
+  support it. Each summand carries its own arc labels from 0 (checked
+  against `knoodlesimplify`'s serialization of a two-summand input, where
+  both blocks run 0..5), so the 0-or-1 numbering above is detected and
+  converted summand by summand: one summand may be 0-based and the next
+  1-based. Does not default-simplify.
 - **KnotTheory `PD[X[...]]`**: converted to Knoodle's native 4-column
   unsigned form, 0-indexed (`(List @@ # & /@ List @@ p) - 1`). Does not
   default-simplify.

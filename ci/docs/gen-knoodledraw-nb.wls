@@ -93,14 +93,27 @@ Graphics object."}], "Usage"],
 \"Trefoil\"), a PD/DTCode/GaussCode from the KnotTheory package, a Function \
 (sampled as a closed space curve for t from 0 to 2 Pi), a list of 3D points \
 (one closed space curve), a list of point lists (a multi-component link), a \
-native Knoodle PD code, or a PlanarDiagramComplex from KnoodleSimplify."],
+native Knoodle PD code, a PD code string as SnapPy prints it, or a \
+PlanarDiagramComplex from KnoodleSimplify."],
    notes["A native Knoodle PD code is a list of crossing rows of 4 to 7 \
 integers each: 4 columns give an unsigned PD code, a 5th column gives the \
 crossing handedness (\[PlusMinus]1), and two further columns carry the \
 incoming under-/over-arc component colors that keep link components \
 identified through simplification. A list of such row lists denotes a \
 connect sum or split link, one summand each; the empty summand {} is an \
-unknot, so {{}} draws the standalone unknot."],
+unknot, so {{}} draws the standalone unknot. Every row of one input must \
+have the same number of columns."],
+   notes["Arcs may be numbered from 0, as Knoodle numbers them, or from 1, as \
+the KnotTheory package, SnapPy and the printed knot tables do. The labels of \
+a valid n-crossing code are exactly 0, \[Ellipsis], 2n-1 or exactly 1, \
+\[Ellipsis], 2n, so the numbering is recognized, separately for each \
+summand, and converted; only the four arc entries of a row are renumbered. \
+A code that fits neither numbering is passed to Knoodle unchanged, and its \
+error message names the bad crossing."],
+   notes["A string such as \"[(1,4,2,5),(3,6,4,1),(5,2,6,3)]\" is read as a \
+PD code, the form SnapPy prints; brackets in place of parentheses, and any \
+spacing or line breaks, are accepted too. Any other string is taken as a \
+KnotData name."],
    notes["3D geometry and KnotData inputs are simplified before drawing by \
 default; explicit diagram inputs (PD codes, KnotTheory objects, \
 PlanarDiagramComplex) are drawn exactly as given unless \"Simplify\" -> True \
